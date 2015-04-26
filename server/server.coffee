@@ -13,11 +13,10 @@ create_db = () ->
 		id integer primary key autoincrement,
 		username text unique)''')
 	db.run('''create table if not exists sessions(
-		id integer primary key autoincrement,
-		user integer,
+		id integer primary key,
 		ip_address text,
 		port integer,
-		foreign key (user) references users (id))''')
+		foreign key (id) references users (id))''')
 	db.run('''create table if not exists public_messages(
 		id integer primary key autoincrement,
 		sender integer,
@@ -37,6 +36,7 @@ create_db = () ->
 		id integer primary key autoincrement,
 		filename text,
 		chunks integer,
+		lock integer,
 		transferred integer,
 		sender integer,
 		receiver integer,
@@ -48,6 +48,12 @@ create_db = () ->
 		chunk_order integer,
 		content text,
 		foreign key (file) references files (id))''')
+	db.run('''create table if not exists blacklist(
+		blocker integer,
+		blocked integer,
+		foreign key (blocker) references users (id),
+		foreign key (blocked) references users (id),
+		primary key (blocker, blocked))''')
 
 handle_incoming = (msg, clt) ->
 	data = JSON.parse(msg.toString('utf-8'))
@@ -56,10 +62,14 @@ handle_incoming = (msg, clt) ->
 		when 'Push' then hdl.dispatcher(db, srv, data, clt)
 		when 'Public_Message' then hdl.public_message(db, srv, data, clt)
 		when 'Private_Message' then hdl.private_message(db, srv, data, clt)
-		when 'Connect' then hdl.connect_user(db, srv, data, clt)
 		when 'List' then hdl.list_users(db, srv, data, clt)
-		when 'Chunk' then hdl.save_chunk(db, srv, data, clt)
+		when 'S_Chunk' then hdl.save_chunk(db, srv, data, clt)
+		when "R_Chunk" then hdl.send_chunk(db, srv, data, clt)
 		when 'File' then hdl.receive_file(db, srv, data, clt)
+		when 'Connect' then hdl.connect_user(db, srv, data, clt)
+		when 'Disconnect' then hdl.disconnect_user(db, srv, data, clt)
+		when 'Block' then hdl.block_user(db, srv, data, clt)
+		when 'Unblock' then hdl.unblock_user(db, srv, data, clt)
 
 srv.on('listening', () ->
 	addr = srv.address()

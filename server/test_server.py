@@ -4,7 +4,6 @@ import unittest2
 import socket
 import json
 import time
-import io
 import base64
 
 HOST = '127.0.0.1'
@@ -15,7 +14,9 @@ class TestServer(unittest2.TestCase):
 	usernames = ["Cristian", "Ines", "Sergio"]
 	username_ids = []
 	scks = []
-	messages = ["Hello World!", "Hello! (Private)", "This is a public message"]
+	messages = ["Hello World!", "Hello! (Private)",
+		"This is a public message", "This message is blocked by someone"]
+	filenames = ["oso.jpg", "test.mp3"]
 	num_con = 3
 	@classmethod
 	def setUpClass(cls):
@@ -72,7 +73,8 @@ class TestServer(unittest2.TestCase):
 		# Enlistamos a todos los usuarios sin filtro alguno
 		data = {
 			"type": "List",
-			"filter": ""
+			"filter": "",
+			"username_id": TestServer.username_ids[0]
 		}
 		data = self._send_recv(data)
 		self.assertEqual(data["response"], "OK")
@@ -81,12 +83,14 @@ class TestServer(unittest2.TestCase):
 		# Enlistamos a los usuarios que cumplan con el filtro especificado
 		data = {
 			"type": "List",
-			"filter": "Cris"
+			"filter": "Cris",
+			"username_id": TestServer.username_ids[0]
 		}
 		data = self._send_recv(data)
 		self.assertEqual(data["response"], "OK")
 		self.assertEqual(len(data["obj"]), 1)
 		self.assertEqual(data["obj"][0]["username"], TestServer.usernames[0])
+		self.assertEqual(data["obj"][0]["status"], 0)
 
 	def test_02_send_public_message(self):
 		# Probamos a mandar un mensaje publico
@@ -98,7 +102,6 @@ class TestServer(unittest2.TestCase):
 		data = self._send_recv(data)
 		self.assertEqual(data["response"], "OK")
 
-
 	def test_03_receive_public_message(self):
 		# Comprobamos que el otro cliente reciba el mensaje enviado con anterioridad
 		data = {
@@ -107,11 +110,12 @@ class TestServer(unittest2.TestCase):
 		}
 		data = self._send_recv(data)
 		self.assertEqual(data["response"], "OK")
+		self.assertEqual(data["messages"][0]["type"], "public")
 		self.assertEqual(data["messages"][0]["username"],
 			TestServer.usernames[0])
 		self.assertEqual(data["messages"][0]["text"], TestServer.messages[0])
 
-	def test_04_not_receive_anything(self):
+	def test_04_not_receive_none(self):
 		# Comprobamos que una vez leido se haya eliminado el mensaje del servidor
 		data = {
 			"type": "Push",
@@ -140,6 +144,7 @@ class TestServer(unittest2.TestCase):
 		}
 		data = self._send_recv(data, 1)
 		self.assertEqual(data["response"], "OK")
+		self.assertEqual(data["messages"][0]["type"], "private")
 		self.assertEqual(data["messages"][0]["username"],
 			TestServer.usernames[1])
 		self.assertEqual(data["messages"][0]["text"], TestServer.messages[1])
@@ -180,6 +185,8 @@ class TestServer(unittest2.TestCase):
 			"username_id": TestServer.username_ids[1],
 		}
 		data = self._send_recv(data, 1)
+		self.assertRegexpMatches(data["messages"][0]["type"], r'(public)|(private)')
+		self.assertRegexpMatches(data["messages"][1]["type"], r'(public)|(private)')
 		self.assertEqual(data["response"], "OK")
 		self.assertEqual(len(data["messages"]), 2)
 
@@ -192,6 +199,7 @@ class TestServer(unittest2.TestCase):
 		data = self._send_recv(data, 1)
 		self.assertEqual(data["response"], "OK")
 		self.assertEqual(len(data["messages"]), 1)
+		self.assertEqual(data["messages"][0]["type"], "public")
 
 		# Comprobamos que él que envío el mensaje publico no lo reciba
 		data = {
@@ -203,10 +211,12 @@ class TestServer(unittest2.TestCase):
 		self.assertEqual(len(data["messages"]), 0)
 
 	def test_11_send_file(self):
-		filename = "oso.jpg"
-		fp = io.FileIO(filename)
-		byte_string = base64.b64encode(fp.read()).decode()
-		fp.close()
+		filename = TestServer.filenames[0]
+		#filename = TestServer.filenames[1]
+		byte_string = None
+		with open(filename, "rb") as fp:
+			byte_string = base64.b64encode(fp.read()).decode()
+
 		UDP_SIZE = 65000
 		cont = 0
 		byte_size = len(byte_string)
@@ -218,19 +228,20 @@ class TestServer(unittest2.TestCase):
 				chunks.append(byte_string[cont:cont + UDP_SIZE])
 			cont += UDP_SIZE
 		chunk_length = len(chunks)
+
 		data = {
 			"type": "File",
 			"filename": filename,
 			"chunks": chunk_length,
-			"sender": TestServer.usernames[0],
-			"receiver": TestServer.usernames[1]
+			"sender": TestServer.username_ids[0],
+			"receiver": TestServer.username_ids[1]
 		}
 		data = self._send_recv(data)
 		self.assertEqual(data["response"], "OK")
 		self.assertEqual(type(data["file_id"]), int)
 
 		chunk_data = {
-			"type": "Chunk",
+			"type": "S_Chunk",
 			"file_id": data["file_id"],
 			"content": None,
 			"order": -1
@@ -240,10 +251,173 @@ class TestServer(unittest2.TestCase):
 			chunk_data["content"] = chunks[i]
 			data = self._send_recv(chunk_data)
 			self.assertEqual(data["response"], "OK")
-		#fp1 = io.FileIO("test.png", "wb")
-		#fp1.write(base64.b64decode(data["content"].encode()))
-		#fp1.close()
-		#self._dummy_sender(data)
+
+	def test_12_push_file(self):
+		user_id = 1
+		data = {
+			"type": "Push",
+			"username_id": TestServer.username_ids[user_id],
+		}
+		file_info = self._send_recv(data, user_id)["messages"][0]
+
+		# Comprobamos si realmente lo bloqueo y ya no regresa un mensaje pendiente
+		rep_data = {
+			"type": "Push",
+			"username_id": TestServer.username_ids[user_id],
+		}
+		rep = self._send_recv(rep_data, user_id)
+		self.assertEqual(rep["response"], "OK")
+		self.assertEqual(len(rep["messages"]), 0)
+
+		# Continuamos con la descarga
+		data = {
+			"type": "R_Chunk",
+			"file_id": file_info["file_id"],
+			"num_part": -1
+		}
+		content = list()
+		for x in range(0, file_info["chunks"]):
+			data["num_part"] = x
+			result = self._send_recv(data)
+			content.append(result["content"])
+		with open("2{0}".format(file_info["filename"]), "wb") as fp:
+			for item in content:
+				fp.write(base64.b64decode(item.encode()))
+
+	def test_12_disconnect_third(self):
+		data = {
+			"type": "Disconnect",
+			"username_id": TestServer.username_ids[2]
+		}
+		data = self._send_recv(data)
+		self.assertEqual(data["response"], "OK")
+
+	def test_13_list_users(self):
+		# Enlistamos a todos los usuarios sin filtro alguno
+		data = {
+			"type": "List",
+			"filter": "",
+			"username_id": TestServer.username_ids[0]
+		}
+		data = self._send_recv(data)
+		self.assertEqual(data["response"], "OK")
+		for item in data["obj"]:
+			if item["username"] == TestServer.username_ids[2]:
+				self.assertEqual(item["status"], -1)
+
+	def test_14_connect_third_again(self):
+		# Conectamos un tercer cliente
+		user_id = 2
+		data = self._new_connection(TestServer.usernames[user_id], user_id)
+		self.assertEqual(data["response"], "OK")
+		TestServer.username_ids.append(data['username_id'])
+
+	def test_15_block_user(self):
+		data = {
+			"type": "Block",
+			"blocker": TestServer.username_ids[0],
+			"blocked": TestServer.username_ids[2]
+		}
+		data = self._send_recv(data)
+		self.assertEqual(data["response"], "OK")
+
+	def test_16_list_users(self):
+		# Enlistamos a todos los usuarios sin filtro alguno
+		data = {
+			"type": "List",
+			"filter": "",
+			"username_id": TestServer.username_ids[0]
+		}
+		data = self._send_recv(data)
+		self.assertEqual(data["response"], "OK")
+		for item in data["obj"]:
+			if item["username"] == TestServer.username_ids[2]:
+				self.assertEqual(item["blocked"], -1)
+
+	def test_16_blocked_private_message(self):
+		data = {
+			"type": "Private_Message",
+			"username_id": TestServer.username_ids[2],
+			"receiver_id": TestServer.username_ids[0],
+			"message": TestServer.messages[1]
+		}
+		data = self._send_recv(data, 1)
+		self.assertEqual(data["response"], "OK")
+
+	def test_17_not_receive_message(self):
+		# Comprobamos que no se reciba mensahe
+		data = {
+			"type": "Push",
+			"username_id": TestServer.username_ids[0],
+		}
+		data = self._send_recv(data, 1)
+		self.assertEqual(data["response"], "OK")
+		self.assertEqual(len(data["messages"]), 0)
+
+	def test_18_send_public_message(self):
+		# Probamos a mandar un mensaje publico
+		data = {
+			"type": "Public_Message",
+			"username_id": TestServer.username_ids[2],
+			"message": TestServer.messages[3]
+		}
+		data = self._send_recv(data)
+		self.assertEqual(data["response"], "OK")
+
+	def test_19_not_receive_message(self):
+		# Checamos que no haya quedado mensaje en el inbox del bloqueado
+		data = {
+			"type": "Push",
+			"username_id": TestServer.username_ids[0],
+		}
+		data = self._send_recv(data)
+		self.assertEqual(data["response"], "OK")
+		self.assertEqual(len(data["messages"]), 0)
+
+	def test_19_receive_message(self):
+		# Limpiamos el mensaje que quedo disponible
+		data = {
+			"type": "Push",
+			"username_id": TestServer.username_ids[1],
+		}
+		data = self._send_recv(data, 1)
+		self.assertEqual(data["response"], "OK")
+		self.assertEqual(data["messages"][0]["type"], "public")
+		self.assertEqual(data["messages"][0]["username"],
+			TestServer.usernames[2])
+		self.assertEqual(data["messages"][0]["text"], TestServer.messages[3])
+
+	def test_19_unblock(self):
+		data = {
+			"type": "Unblock",
+			"blocker": TestServer.username_ids[0],
+			"blocked": TestServer.username_ids[2]
+		}
+		data = self._send_recv(data)
+		self.assertEqual(data["response"], "OK")
+
+	def test_20_unblocked_private_message(self):
+		data = {
+			"type": "Private_Message",
+			"username_id": TestServer.username_ids[2],
+			"receiver_id": TestServer.username_ids[0],
+			"message": TestServer.messages[1]
+		}
+		data = self._send_recv(data, 1)
+		self.assertEqual(data["response"], "OK")
+
+	def test_21_receive_message_from_unblocked(self):
+		# Limpiamos el mensaje que quedo disponible
+		data = {
+			"type": "Push",
+			"username_id": TestServer.username_ids[0],
+		}
+		data = self._send_recv(data)
+		self.assertEqual(data["response"], "OK")
+		self.assertEqual(data["messages"][0]["type"], "private")
+		self.assertEqual(data["messages"][0]["username"],
+			TestServer.usernames[2])
+		self.assertEqual(data["messages"][0]["text"], TestServer.messages[1])
 
 	@classmethod
 	def tearDownClass(cls):

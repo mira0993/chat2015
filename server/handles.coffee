@@ -1,5 +1,3 @@
-fs = require('fs')
-
 get_actual_dt_string = () ->
 	return (new Date).toISOString()
 
@@ -24,7 +22,7 @@ send_response = (db, srv, json, clt) ->
 
 send_error = (db, srv, clt, err) ->
 	resp = {'response': "#{err}"}
-	send_response(db, serv, resp, clt)
+	send_response(db, srv, resp, clt)
 
 watchdog = (db, srv, json, clt) ->
 	timeout = 1000
@@ -39,9 +37,19 @@ watchdog = (db, srv, json, clt) ->
 		)
 	setTimeout(cycle, timeout)
 
+module.exports.block_user = (db, srv, data, clt) ->
+	stmt = db.prepare('''insert into blacklist values (?, ?)''')
+	stmt.run(data.blocker, data.blocked, (err) ->
+		if err
+			send_error(db, srv, clt, err)
+		else
+			resp = {'response': 'OK'}
+			send_response(db, srv, resp, clt)
+	)
+
 module.exports.connect_user = (db, srv, data, clt) ->
 	create_session = (id) ->
-		stmt = db.prepare('''insert into sessions (user, ip_address, port)
+		stmt = db.prepare('''insert into sessions (id, ip_address, port)
 			values (?, ?, ?)''')
 		stmt.run(id, clt.address, clt.port,
 			(err) ->
@@ -63,7 +71,7 @@ module.exports.connect_user = (db, srv, data, clt) ->
 				if err
 					send_error(db, srv, clt, err)
 				else
-					db.get('select user from sessions where user = ?', id,
+					db.get('select id from sessions where id = ?', id,
 						(err, row) ->
 							if row
 								resp = 
@@ -98,17 +106,47 @@ module.exports.connect_user = (db, srv, data, clt) ->
 
 module.exports.dispatcher = (db, srv, data, clt) ->
 	resp = {"response": "OK", "messages": new Array()}
+
+	dispatcher_file = () ->
+		stmt = db.prepare('update files set lock=1 where id = ?')
+		db.each('''select A.id, A.filename, A.chunks, B.username from files A
+			inner join users B on A.sender=B.id
+			where A.receiver = ? and A.lock = 0''', data.username_id,
+			((err, row) ->
+				if err
+					console.log(err)
+				else
+					resp.messages.push(
+						"type": "file"
+						"file_id": row.id
+						"username": row.username
+						"filename": row.filename
+						"chunks": row.chunks)
+					stmt.run(row.id, (err) ->
+						if err
+							console.log(err)
+					)
+			),
+			(err, num_rows) ->
+				if err
+					console.log(err)
+				send_response(db, srv, resp, clt)
+			)
+		return
+
 	dispatcher_private = () ->
 		stmt = db.prepare("""delete from messages_#{data.username_id}
 			where id = ?""")
 		db.each("""select A.id, B.username, A.message
 			from messages_#{data.username_id} A
-			inner join users B on A.sender=B.id""", ((err, row) ->
+			inner join users B on A.sender=B.id""",
+			((err, row) ->
 				if err
-					send_error(db, srv, clt, err)
+					console.log(err)
 				else
 					resp.messages.push(
-						"username": row.username,
+						"type": "private"
+						"username": row.username
 						"text": row.message)
 					stmt.run(row.id, (err) ->
 						if err
@@ -116,8 +154,11 @@ module.exports.dispatcher = (db, srv, data, clt) ->
 					)
 			),
 			((err, num_rows) ->
-				if not err
-					send_response(db, srv, resp, clt)))
+				if err
+					console.log(err)
+				dispatcher_file()
+			)
+		)
 	
 	stmt = db.prepare('delete from push_public where id = ? and user = ?')
 	db.each('''select B.id, B.user, C.username, A.message
@@ -127,10 +168,11 @@ module.exports.dispatcher = (db, srv, data, clt) ->
 		where B.user = ?''', data.username_id,
 		((err, row) ->
 			if err
-				send_error(db, srv, clt, err)
+				console.log(err)
 			else
 				resp.messages.push(
-					"username": row.username,
+					"type": "public"
+					"username": row.username
 					"text": row.message)
 				stmt.run(row.id, row.user, (err) ->
 					if err
@@ -138,35 +180,97 @@ module.exports.dispatcher = (db, srv, data, clt) ->
 				)
 		),
 		((err, num_rows) ->
-			if not err
-				dispatcher_private())
+			if err
+				console.log(err)
+			dispatcher_private()
+		)
+	)
+
+module.exports.disconnect_user = (db, srv, data, clt) ->
+	stmt = db.prepare('delete from sessions where id = ?')
+	stmt.run(data.username_id, (err) ->
+		if err
+			send_error(db, srv, resp, clt)
+		else if this.changes == 1
+			resp = {'response': 'OK'}
+			send_response(db, srv, resp, clt)
+		else
+			resp = {'response': 'You weren\'t connected'}
+			send_response(db, srv, resp, clt)
 	)
 
 module.exports.list_users = (db, srv, data, clt) ->
+	common_qry = """select A.username,
+		case when B.id is null then -1 else 0 end as status,
+		case when C.blocker is null then 0 else -1 end as blocked
+		from users A left outer join sessions B on A.id=B.id
+		left outer join blacklist C on A.id=C.blocked and C.blocker = ?"""
 	clbk = (err, rows) ->
 		resp = if err \
 			then {'response': "#{err}"} \
 			else {'response': 'OK', 'obj': rows}
 		send_response(db, srv, resp, clt)
 	if data.filter == ''
-		params = ['select * from users', clbk]
+		params = [common_qry, [data.username_id], clbk]
 	else
-		params = ["select * from users where username  like ?",
-			["%#{data.filter}%"], clbk]
+		params = ["#{common_qry} where username  like ?",
+			[data.username_id, "%#{data.filter}%"], clbk]
 	db.all.apply(db, params)
 
 module.exports.private_message = (db, srv, data, clt) ->
-	stmt = db.prepare("""insert into messages_#{data.receiver_id}
-		(sender, dtime, message) values (?, ?, ?)""")
-	stmt.run(data.username_id, get_actual_dt_string(), data.message, (err) ->
-		if err
-			send_error(db, srv, clt, err)
-		else
-			resp = {"response": "OK"}
-			send_response(db, srv, resp, clt)
+	success_resp = () ->
+		resp = {"response": "OK"}
+		send_response(db, srv, resp, clt)
+
+	save_private = () ->
+		stmt = db.prepare("""insert into messages_#{data.receiver_id}
+			(sender, dtime, message) values (?, ?, ?)""")
+		stmt.run(data.username_id, get_actual_dt_string(), data.message,
+			(err) ->
+				if err
+					send_error(db, srv, clt, err)
+		)
+
+	db.get('select blocked from blacklist where blocker = ? and blocked = ?',
+		data.receiver_id, data.username_id,
+		(err, row) ->
+			if (not err) and (not row)
+				save_private()
+			else
+				console.log("Blocker = #{data.receiver_id} -"
+					"Blocked = #{data.username_id}")
+			success_resp()
 	)
+	
 
 module.exports.public_message = (db, srv, data, clt) ->
+	store_public = (id) ->
+		stmt = db.prepare("""insert into push_public
+			values(#{id}, ?)""")
+		db.each('''select A.id,
+			case when B.blocker is null then 0 else 1 end as permission
+			from users A left outer join blacklist B on A.id=B.blocker
+			where A.id != ?''',
+			data.username_id,
+			((err, row) ->
+				if err
+					console.log(err)
+				else if row
+					if row.permission == 1
+						console.log("Blocker = #{row.id} -"
+							"Blocked = #{data.username_id}")
+					else
+						stmt.run(row.id, (err) ->
+							if err
+								console.log(err)
+						)
+			),
+			((err, num_rows) ->
+				if err
+					console.log(err)
+			)
+		)
+
 	stmt = db.prepare('''insert into public_messages (sender, dtime, message)
 		values (?, ?, ?)''')
 	stmt.run(data.username_id, get_actual_dt_string(), data.message,
@@ -176,19 +280,7 @@ module.exports.public_message = (db, srv, data, clt) ->
 			else
 				resp = {'response': 'OK'}
 				send_response(db, srv, resp, clt)
-				stmt = db.prepare("""insert into push_public
-					values(#{this.lastID}, ?)""")
-				db.each('select id from users where id != ?',
-					data.username_id,
-					(err, row) ->
-						if err
-							console.log(err)
-						else if row
-							stmt.run(row.id, (err) ->
-								if err
-									console.log(err)
-							)
-				)
+				store_public(this.lastID)
 	)
 
 module.exports.receive_ack = (db, srv, data, ctl) ->
@@ -200,8 +292,8 @@ module.exports.receive_ack = (db, srv, data, ctl) ->
 
 module.exports.receive_file = (db, srv, data, clt) ->
 	stmt = db.prepare('''insert into files
-		(filename, chunks, transferred, sender, receiver)
-		values (?, ?, 0, ?, ?)''')
+		(filename, chunks, lock, transferred, sender, receiver)
+		values (?, ?, 0, 0, ?, ?)''')
 	stmt.run(data.filename, data.chunks, data.sender, data.receiver, (err) ->
 		if err
 			send_error(db, srv, clt, err)
@@ -233,4 +325,32 @@ module.exports.save_chunk = (db, srv, data, clt) ->
 					if row.finished == 0
 						save_finished()
 			)
+	)
+
+module.exports.send_chunk = (db, srv, data, clt) ->
+	stmt = db.prepare('delete from chunks where id = ?')
+	db.get('''select B.id, B.content from files A
+		inner join chunks B on A.id=B.file
+		where A.id = ? and A.lock = 1 and B.chunk_order = ?''', data.file_id,
+		data.num_part, (err, row) ->
+			if err
+				send_error(db, srv, clt, err)
+			else
+				resp = {'response': 'OK', 'content': row.content}
+				send_response(db, srv, resp, clt)
+				stmt.run(row.id, (err) ->
+					if err
+						console.log(err)
+				)
+	)
+
+module.exports.unblock_user = (db, srv, data, clt) ->
+	stmt = db.prepare('''delete from blacklist
+		where blocker = ? and blocked = ?''')
+	stmt.run(data.blocker, data.blocked, (err) ->
+		if err
+			send_error(db, srv, clt, err)
+		else
+			resp = {'response': 'OK'}
+			send_response(db, srv, resp, clt)
 	)
