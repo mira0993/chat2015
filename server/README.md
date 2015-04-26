@@ -1,79 +1,40 @@
-##API Reference
-------
+#Chat 2015
+--------
 
-###Server
-------
+Distributed Systems Project
 
-1. **Check if server is running:**  
-    a. Type: **GET**  
-    b. Path: **/**  
-    c. Parameters: **None**  
-    d. Returns: **It's running**
-    
-###User Manipulation
-------
+###Creating virtual environment (archlinux)
+-----
 
-<ol type="1">
-    <li><b>Create an user:</b>
-        <ol type="a">
-            <li>Type: <b>POST</b></li>
-            <li>Path: <b>/Users/Create/</b></li>
-            <li>Parameters:
-                <ol type="i">
-                    <li><b>full_name</b></li>
-                    <li><b>username</b></li>
-                    <li><b>password</b></li>
-                </ol>
-            </li>
-            <li>Returns: <b>OK</b></li>
-        </ol>
-    </li>
-    
-    <li><b>List avalaible users:</b>
-        <ol type="a">
-            <li>Type: <b>GET</b></li>
-            <li>Path: <b>/Users/List/</b></li>
-            <li>Parameters:
-                <ol type="i">
-                    <li><b>filter</b> (Optional, used to filter the search. If doesn't appear it will return all the available users)</li>
-                </ol>
-            </li>
-            <li>Returns:
-                <ol type="i">
-                    <li><b>[]</b> (If no match)</li>
-                    <li><b>[{"full_name": "<FULLNAME>, "username": "<USERNAME>"}, ...]</b></li>
-                </ol>
-            </li>
-        </ol>
-    </li>
-    
-    <li><b>Delete an user:</b>
-        <ol type="a">
-            <li>Type: <b>POST</b></li>
-            <li>Path: <b>/Users/Delete/</b></li>
-            <li>Parameters:
-                <ol type="i">
-                    <li><b>username</b></li>
-                </ol>
-            </li>
-            <li>Returns: <b>OK</b></li>
-        </ol>
-    </li>
-</ol>
+1. Run the following commands:
 
-###Error Handling
--------
+        sudo pacman -S python-virtualenv
+        
+2. Cd into your project dir and run the following:
 
-Whatever procedure you execute has an error message associated, the format is the following:
+        virtualenv3 .venv
+        source .venv/bin/activate
+        pip install -r requirements.txt
 
-    ERROR: <Message_for_that_procedure>
-    
-If the server is in **DEBUG** mode, the format will be the following:
+###Installing postgresql (archlinux)
+-----
 
-    ERROR: <Message_for_that_procedure>\n <Server's_Exception>
-    
-    
-###Running the tests
--------
+1. Run the following commands:
 
-**Warning:** The set of test cases will drop the postgresql schema in order to work with a clean database.
+        sudo pacman -S postgresql
+        sudo -i -u postgres
+        initdb --locale en_US.UTF-8 -E UTF8 -D '/var/lib/postgres/data'
+        
+2. Run in another shell, but do not close the postgres shell:
+
+        sudo systemctl start postgresql
+        
+3. Then, return to the postgres shell and run:
+
+        createuser --interactive
+        createdb chat
+        psql
+        alter user postgres with password '<NEW_PASSWORD>';
+        alter user <USER_YOU_HAVE_JUST_CREATED> with password '<NEW_PASSWORD>';
+        \q
+
