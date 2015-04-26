@@ -1,40 +1,54 @@
-#Chat 2015
---------
+#Chat 2015 (Server)
+----
 
-Distributed Systems Project
+####Installing node modules  
+----  
+The modules already are in the server path, but if you have problems delete the node_modules folder with
+```rm -rf node_modules```. Afterwards, if you want to be able to execute coffee from you system do the following:
+```
+sudo npm install -g coffee-script
+```
+Otherwise, if you want to execute from the node_modules (./node_modules/.bin/coffee) directory run the following:
+```
+npm install coffee-script
+```
+Install the remaining dependencies:
+```
+npm install sqlite3
+```
 
-###Creating virtual environment (archlinux)
------
+####Running the server
+----
+If you install coffeescript using **-g**:
+```
+coffee server.coffee
+```
+On the other hand, if you install it without **-g**:
+```
+./node_modules/.bin/coffee server.coffee
+```
 
-1. Run the following commands:
+####Compiling and running using node
+----
+Run the following:  
+```
+coffee -c server.coffee handles.coffee
+node server.js
+```
 
-        sudo pacman -S python-virtualenv
-        
-2. Cd into your project dir and run the following:
+####Running python tests
+----
+1. First you have to install the dependencies:  
+  ```
+  sudo pacman -Sy python-pip
+  sudo pip install unittest2
+  ```
+2. Finally, run it:  
+  ```
+  python test_server.py
+  ```
 
-        virtualenv3 .venv
-        source .venv/bin/activate
-        pip install -r requirements.txt
-
-###Installing postgresql (archlinux)
------
-
-1. Run the following commands:
-
-        sudo pacman -S postgresql
-        sudo -i -u postgres
-        initdb --locale en_US.UTF-8 -E UTF8 -D '/var/lib/postgres/data'
-        
-2. Run in another shell, but do not close the postgres shell:
-
-        sudo systemctl start postgresql
-        
-3. Then, return to the postgres shell and run:
-
-        createuser --interactive
-        createdb chat
-        psql
-        alter user postgres with password '<NEW_PASSWORD>';
-        alter user <USER_YOU_HAVE_JUST_CREATED> with password '<NEW_PASSWORD>';
-        \q
-
+####API Reference
+----
+Go to the following link:  
+- [API readme](https://github.com/mira0993/chat2015/blob/master/server/API.md)
