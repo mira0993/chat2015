@@ -200,7 +200,7 @@ module.exports.disconnect_user = (db, srv, data, clt) ->
 	)
 
 module.exports.list_users = (db, srv, data, clt) ->
-	common_qry = """select A.username,
+	common_qry = """select A.id, A.username,
 		case when B.id is null then -1 else 0 end as status,
 		case when C.blocker is null then 0 else -1 end as blocked
 		from users A left outer join sessions B on A.id=B.id
