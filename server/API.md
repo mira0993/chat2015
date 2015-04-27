@@ -201,6 +201,7 @@ doesn't return anything.**
 
 #####Send public message
 ----
+```
 {
   "type": "Private_Message",
   "username_id": <SENDER_ID> (INTEGER),
