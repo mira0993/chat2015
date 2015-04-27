@@ -39,10 +39,12 @@ node server.js
 ####Running python tests
 ----
 1. First you have to install the dependencies:  
+
   ```
   sudo pacman -Sy python-pip
   sudo pip install unittest2
   ```
+
 2. Finally, run it:  
   ```
   python test_server.py
