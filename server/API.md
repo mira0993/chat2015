@@ -14,7 +14,7 @@ doesn't return anything.**
 ```
 {
   "type": "ACK",
-  "response_id": <ID_FROM_THE_PREVIOUS_RECEIVED_MESSAGE> (INTEGER)
+  "ack_uuid": <UUID_FROM_CLIENT> (STRING)
 }
 ```
 *No response.*
@@ -25,6 +25,7 @@ doesn't return anything.**
 ```
 {
   "type": "Block",
+  "request_uuid": <UUID_FROM_CLIENT> (STRING),
   "blocker": <USERNAME_ID_OF_THE_USER_WHICH_WANTS_TO_BLOCK_SOMEONE> (INTEGER),
   "blocked": <USERNAME_ID_OF_THE_USER_WHICH_WANTS_TO_BLOCK> (INTEGER),
 }
@@ -33,7 +34,7 @@ doesn't return anything.**
 ```
 {
   "response": "OK",
-  "response_id": <RESPONSE_ID> (INTEGER),
+  "response_uuid": <UUID_FROM_CLIENT_RETURNED_BY_THE_SERVER> (STRING)
 }
 ```
 
@@ -43,6 +44,7 @@ doesn't return anything.**
 ```
 {
   "type": "Unblock",
+  "request_uuid": <UUID_FROM_CLIENT> (STRING),
   "blocker": <USERNAME_ID_OF_THE_USER_WHICH_WANTS_TO_UNBLOCK_SOMEONE> (INTEGER),
   "blocked": <USERNAME_ID_OF_THE_USER_WHICH_WANTS_TO_UNBLOCK> (INTEGER),
 }
@@ -51,7 +53,7 @@ doesn't return anything.**
 ```
 {
   "response": "OK",
-  "response_id": <RESPONSE_ID> (INTEGER),
+  "response_uuid": <UUID_FROM_CLIENT_RETURNED_BY_THE_SERVER> (STRING)
 }
 ```
 
@@ -61,6 +63,7 @@ doesn't return anything.**
 ```
 {
   "type": "Connect",
+  "request_uuid": <UUID_FROM_CLIENT> (STRING),
   "username": <USERNAME> (STRING)
 }
 ```
@@ -68,7 +71,7 @@ doesn't return anything.**
 ```
 {
   "response": "OK",
-  "response_id": <RESPONSE_ID> (INTEGER),
+  "response_uuid": <UUID_FROM_CLIENT_RETURNED_BY_THE_SERVER> (STRING),
   "username_id": <USERNAME_ID_TO_IDENTIFY_THE_USER> (INTEGER)
 }
 ```
@@ -79,6 +82,7 @@ doesn't return anything.**
 ```
 {
   "type": "Disconnect",
+  "request_uuid": <UUID_FROM_CLIENT> (STRING),
   "username_id": <USERNAME_ID> (INTEGER)
 }
 ```
@@ -86,7 +90,7 @@ doesn't return anything.**
 ```
 {
   "response": "OK" or "'You weren't connected",
-  "response_id": <RESPONSE_ID> (INTEGER),
+  "response_uuid": <UUID_FROM_CLIENT_RETURNED_BY_THE_SERVER> (STRING),
   "username_id": <USERNAME_ID> (INTEGER)
 }
 ```
@@ -97,6 +101,7 @@ doesn't return anything.**
 ```
 {
   "type": "List",
+  "request_uuid": <UUID_FROM_CLIENT> (STRING),
   "username_id": <USERNAME_ID> (INTEGER),
   "filter": <FILTER_TO_USE> or "" [empty to retrieve all] (STRING),
 }
@@ -105,7 +110,7 @@ doesn't return anything.**
 ```
 {
   "response": "OK" (Always, even if it the user list was empty),
-  "response_id": <RESPONSE_ID> (INTEGER),
+  "response_uuid": <UUID_FROM_CLIENT_RETURNED_BY_THE_SERVER> (STRING),
   "obj": [
     {
       "id": <USERNAME_ID> (INTEGER),
@@ -124,6 +129,7 @@ doesn't return anything.**
 ```
 {
   "type": "PUSH",
+  "request_uuid": <UUID_FROM_CLIENT> (STRING),
   "username_id": <USERNAME_ID> [Receiver's id] (INTEGER)
 }
 ```
@@ -131,7 +137,7 @@ doesn't return anything.**
 ```
 {
   "response": "OK",
-  "response_id": <RESPONSE_ID> (INTEGER),
+  "response_uuid": <UUID_FROM_CLIENT_RETURNED_BY_THE_SERVER> (STRING),
   "messages": [
     {
       "type": "public" or "private",
@@ -165,6 +171,7 @@ doesn't return anything.**
 ```
 {
   "type": "File",
+  "request_uuid": <UUID_FROM_CLIENT> (STRING),
   "filename": <FILENAME> (STRING),
   "CHUNKS": <NUMBER_OF_CHUNKS> (INTEGER),
   "sender": <SENDER_ID> (INTEGER),
@@ -175,7 +182,7 @@ doesn't return anything.**
 ```
 {
   "response": "OK",
-  "response_id": <RESPONSE_ID> (INTEGER),
+  "response_uuid": <UUID_FROM_CLIENT_RETURNED_BY_THE_SERVER> (STRING),
   "file_id": <FILE_ID> [Save it! It helps in sending the chunks to the server] (INTEGER)
 }
 ```
@@ -186,6 +193,7 @@ doesn't return anything.**
 ```
 {
   "type": "Private_Message",
+  "request_uuid": <UUID_FROM_CLIENT> (STRING),
   "username_id": <SENDER_ID> (INTEGER),
   "receiver_id": <RECEIVER_ID> (INTEGER),
   "message": <MESSAGE_TEXT> (STRING)
@@ -195,7 +203,7 @@ doesn't return anything.**
 ```
 {
   "response": "OK",
-  "response_id": <RESPONSE_ID> (INTEGER)
+  "response_uuid": <UUID_FROM_CLIENT_RETURNED_BY_THE_SERVER> (STRING),
 }
 ```
 
@@ -204,6 +212,7 @@ doesn't return anything.**
 ```
 {
   "type": "Private_Message",
+  "request_uuid": <UUID_FROM_CLIENT> (STRING),
   "username_id": <SENDER_ID> (INTEGER),
   "message": <MESSAGE_TEXT> (STRING)
 }
@@ -212,6 +221,6 @@ doesn't return anything.**
 ```
 {
   "response": "OK",
-  "response_id": <RESPONSE_ID> (INTEGER)
+  "response_uuid": <UUID_FROM_CLIENT_RETURNED_BY_THE_SERVER> (STRING)
 }
 ```
