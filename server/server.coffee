@@ -30,8 +30,7 @@ create_db = () ->
 		foreign key (id) references public_messages (id),
 		foreign key (user) references users (id))''')
 	db.run('''create table if not exists acks(
-		id integer primary key autoincrement,
-		received integer)''')
+		uuid text unique)''')
 	db.run('''create table if not exists files(
 		id integer primary key autoincrement,
 		filename text,
@@ -56,20 +55,24 @@ create_db = () ->
 		primary key (blocker, blocked))''')
 
 handle_incoming = (msg, clt) ->
-	data = JSON.parse(msg.toString('utf-8'))
-	switch data.type
-		when 'ACK' then hdl.receive_ack(db, srv, data, clt)
-		when 'Push' then hdl.dispatcher(db, srv, data, clt)
-		when 'Public_Message' then hdl.public_message(db, srv, data, clt)
-		when 'Private_Message' then hdl.private_message(db, srv, data, clt)
-		when 'List' then hdl.list_users(db, srv, data, clt)
-		when 'S_Chunk' then hdl.save_chunk(db, srv, data, clt)
-		when "R_Chunk" then hdl.send_chunk(db, srv, data, clt)
-		when 'File' then hdl.receive_file(db, srv, data, clt)
-		when 'Connect' then hdl.connect_user(db, srv, data, clt)
-		when 'Disconnect' then hdl.disconnect_user(db, srv, data, clt)
-		when 'Block' then hdl.block_user(db, srv, data, clt)
-		when 'Unblock' then hdl.unblock_user(db, srv, data, clt)
+	params = 
+		"db": db 
+		"srv": srv
+		"clt": clt
+		"data": JSON.parse(msg.toString('utf-8'))
+	switch params.data.type
+		when 'ACK' then hdl.receive_ack(params)
+		when 'Push' then hdl.dispatcher(params)
+		when 'Public_Message' then hdl.public_message(params)
+		when 'Private_Message' then hdl.private_message(params)
+		when 'List' then hdl.list_users(params)
+		when 'S_Chunk' then hdl.save_chunk(params)
+		when "R_Chunk" then hdl.send_chunk(params)
+		when 'File' then hdl.receive_file(params)
+		when 'Connect' then hdl.connect_user(params)
+		when 'Disconnect' then hdl.disconnect_user(params)
+		when 'Block' then hdl.block_user(params)
+		when 'Unblock' then hdl.unblock_user(params)
 
 srv.on('listening', () ->
 	addr = srv.address()

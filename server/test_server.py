@@ -5,6 +5,7 @@ import socket
 import json
 import time
 import base64
+import uuid
 
 HOST = '127.0.0.1'
 PORT = 8000
@@ -37,13 +38,14 @@ class TestServer(unittest2.TestCase):
 		TestServer.scks[selector].sendto(js, (HOST, PORT))
 
 	def _send_recv(self, data, selector=0):
+		data["request_uuid"] = str(uuid.uuid4())
 		js = bytes(json.dumps(data), 'UTF-8')
 		TestServer.scks[selector].sendto(js, (HOST, PORT))
 		resp, addr = TestServer.scks[selector].recvfrom(65536)
 		result = json.loads(resp.decode('utf-8'))
 		ack = {
 			"type": "ACK",
-			"response_id": result["response_id"]
+			"ack_uuid": result["response_uuid"]
 		}
 		js = bytes(json.dumps(ack), 'UTF-8')
 		TestServer.scks[selector].sendto(js, (HOST, PORT))
@@ -418,7 +420,7 @@ class TestServer(unittest2.TestCase):
 		self.assertEqual(data["messages"][0]["username"],
 			TestServer.usernames[2])
 		self.assertEqual(data["messages"][0]["text"], TestServer.messages[1])
-
+	
 	@classmethod
 	def tearDownClass(cls):
 		for x in range(0, TestServer.num_con):
