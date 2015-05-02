@@ -53,6 +53,7 @@ function add_message(id, user, text, time, me){
 }
 
 function add_user(id, user, connected){
+    id = Number(id)+1;
     if(connected == true) {
         bkg_color = "55C1E7";
         conn = "Connected";
