@@ -6,6 +6,7 @@ get_common_params = (params) ->
 		"srv": params.srv
 		"clt": params.clt
 		"request_uuid": params.data.request_uuid
+		"type": params.data.type
 	return resp
 
 get_actual_dt_string = () ->
@@ -19,6 +20,7 @@ send_response = (params) ->
 				setTimeout(store_in_db, 500)
 			else
 				params.resp.response_uuid = params.request_uuid
+				params.resp.type = params.type
 				resp = JSON.stringify(params.resp)
 				cycle_send = (err) ->
 					if err
@@ -36,6 +38,7 @@ send_error = (params) ->
 
 watchdog = (params) ->
 	timeout = 1000
+	times = 0
 	cycle = () ->
 		params.db.get('select uuid from acks where uuid = ?',
 			params.resp.response_uuid,
@@ -46,7 +49,9 @@ watchdog = (params) ->
 					resp = JSON.stringify(params.resp)
 					params.srv.send(resp, 0, resp.length, params.clt.port,
 						params.clt.address)
-					setTimeout(cycle, timeout)
+					times++
+					if times <= MAX_TRIES
+						setTimeout(cycle, timeout)
 		)
 	setTimeout(cycle, timeout)
 

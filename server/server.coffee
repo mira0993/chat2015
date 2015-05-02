@@ -55,6 +55,7 @@ create_db = () ->
 		primary key (blocker, blocked))''')
 
 handle_incoming = (msg, clt) ->
+	console.log(msg);
 	params = 
 		"db": db 
 		"srv": srv
