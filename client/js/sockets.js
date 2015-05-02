@@ -8,12 +8,13 @@ module.exports.CONNECT = 1;
 PRIVATE = 2;
 PUBLIC = 3;
 
+var username_id = -1;
 
-var uuid = require('uuid')
+var uuid = require('uuid');
 
 send_response = function(me, json){
     msg = JSON.stringify(json);
-    me.send(new Buffer(msg),0, msg.length,module.exports.PORT,
+    me.send(new Buffer(msg), 0, msg.length, module.exports.PORT,
             module.exports.SERVER, function(err, bytes){
         if(err){
             throw err;
@@ -45,13 +46,21 @@ module.exports.__connect__ = function(me, db, user){
 };
 
 var watchdog = function(){
-    setInterval(watchdog, 1000);;
+    //setInterval(watchdog, 1000);
 }
 
-module.exports.recv_ack = function(db, json){
+module.exports.recv_ack = function(me, db, json){
     var callback = function(err, row){
-        console.log("select");
+        console.log(json);
         if(row){
+            rdata = {"type": "ACK", "ack_uuid": json.response_uuid};
+            console.log(rdata);
+            send_response(me, rdata);
+            switch(json.type) {
+                case 'Connect':
+                    username_id = json.username_id;
+                    break;
+            }
             console.log(row);
             db.run('delete from acks where uuid = ?', json["response_uuid"],
                 function (err){

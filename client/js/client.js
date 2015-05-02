@@ -1,7 +1,7 @@
 (function() {
     dgram = require('dgram');
-    sqlite3 = require("sqlite3")
-    sck = require('./js/sockets.js')
+    sqlite3 = require("sqlite3");
+    sck = require('./js/sockets.js');
 
 
     db = new sqlite3.Database(':memory:')
@@ -13,16 +13,22 @@
     var client = dgram.createSocket('udp4');
     address = "";
 
-     Connect = function () {
+    Connect = function () {
         return sck.__connect__(client, db, $("body").attr("name"));
     }
 
     var handle_messages = function (message, remote) {
         var data = JSON.parse(message.toString('utf-8'));
-        console.log(message.toString('utf-8'));
-        switch (data["type"]) {
-            case 'Connect':
-                return sck.recv_ack(db, data);
+        console.log(data);
+        if (data.type) {
+            if (data.response) {
+                sck.recv_ack(client, db, data);
+            } else {
+                switch (data["type"]) {
+                    case 'Connect':
+                        return; //sck.recv_ack(db, data);
+                }
+            }
         }
     };
 
