@@ -1,18 +1,19 @@
 {
   "name": "chat2015",
-  "version": "1.0.0",
+  "version": "0.12.2",
   "description": "Distributed systems final project",
   "main": "index.html",
+  "single-instance":false,
   "window": {
     "title": "La sexy y el papi chat",
     "widht": 400,
     "height": 600,
     "max_height": 600,
     "max_width":400,
-    //"min_height": 600,
-    //"min_width":400,
-    "position": "mouse"
-    //"resizable": false
+    "min_height": 600,
+    "min_width":400,
+    "position": "mouse",
+    "resizable": false
   },
   "scripts": {
     "test": "echo \"Error, no test specified\" && exit 1"
@@ -26,5 +27,8 @@
   "bugs": {
     "url": "https://github.com/mira0993/chat2015/issues"
   },
-  "homepage": "https://github.com/mira0993/chat2015"
+  "homepage": "https://github.com/mira0993/chat2015",
+  "dependencies":{
+    "sqlite3":"3.0.5"
+  }
 }

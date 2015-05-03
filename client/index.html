@@ -13,11 +13,11 @@
     <div id="main_container" class="container" role="main">
         <ul class="nav nav-tabs" role="tablist" id="tabs">
             <li role="presentation" class="active" id="tab0" ><a href="#" onclick='select_tab("tab0")'>Home</a></li>
-            <li role="presentation" id="tab1"><a href="#" onclick='select_tab("tab1")'>All</a></li>
+            <li role="presentation" id="tab1">
+                <a href="#" onclick='select_tab("tab1")'>All</a>
+            </li>
         </ul>
         <div id="div_0">
-            <button onclick='add_user(45, "pablo", true)'>Add</button>
-            <button onclick='change_user_state(45, false)'>ch</button>
             <div id="clock-div" class="row">
                 <div class="panel panel-primary">
                     <div class="panel-heading" id="clock-heading">
@@ -44,98 +44,89 @@
                     </div>
                     <div id="clients_panel" class="panel-body">
                         <ul class="media-list" >
-                            <li id="user2" class="media" >
-                                <div class="media-body" onclick="go_to_chat('user2')">
-                                    <div class="media">
-                                        <a class="pull-left" href="#">
-                                            <img class="media-object img-circle" style="max-height:40px;" src="http://placehold.it/50/55C1E7/fff&text=U">
-                                        </a>
-                                        <div class="media-body">
-                                            <h5>Alex Deo</h5>
-                                            <small class="text-muted">Active From 3 hours</small>
-                                        </div>
-                                    </div>
-                                </div>
-                            </li>
-                            <li class="media">
-                                <div class="media-body">
-                                    <div class="media">
-                                        <a class="pull-left" href="#">
-                                            <img class="media-object img-circle" style="max-height:40px;" src="http://placehold.it/50/55C1E7/fff&text=A">
-                                        </a>
-                                        <div class="media-body">
-                                            <h5>Jhon Rexa | User </h5>
-                                            <small class="text-muted">Active From 3 hours</small>
-                                        </div>
-                                    </div>
-                                </div>
-                            </li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
-        </div>
-        <div id="div_1" style="display:none">
-            <div class="row" style="padding:5px">
-                <ul id="msgs_1" class="media-list">
-                </ul>
-                <nav  id="nav1" class="navbar navbar-fixed-bottom" style="height: 50px">
-                    <div class="container" style="height: inherit">
-                        <div id="fixed-bar1" class="navbar-header" style="height: inherit">
-                            <div class="input-group" style="height: 50px">
-                                <input  id="sendtext1" class="form-control" style="height: 50px" placeholder="Enter Message" type="text">
-                                <span class="input-group-btn" style="height: 50px">
-                                    <button class="btn btn-warning btn-file" style="height: 50px">
-                                        <span class="glyphicon glyphicon-file"></span>
-                                        <input id="file1" type="file" onchange='add_file($(this).attr("id"))'>
-                                    </button>
-                                    <button class="btn btn-info" style="height:50px" type="button" id="send_1">
-                                        <span class="glyphicon glyphicon-arrow-right"></span>
-                                    </button>
+                            <!--
+                           <li id="user2" class="media" >
+                               <div class="media-body" onclick="go_to_chat('user2')">
+                                   <div class="media">
+                                       <a class="pull-left" href="#">
+                                           <img class="media-object img-circle" style="max-height:40px;" src="http://placehold.it/50/55C1E7/fff&text=U">
+                                       </a>
+                                       <div class="media-body">
+                                           <h5>Alex Deo</h5>
+                                           <small class="text-muted">Active From 3 hours</small>
+                                       </div>
+                                   </div>
+                               </div>
+                           </li>
+                           -->
+                       </ul>
+                   </div>
+               </div>
+           </div>
+       </div>
+       <div id="div_1" style="display:none">
+           <div class="row" style="padding:5px">
+               <ul id="msgs_1" class="media-list">
+               </ul>
+               <nav  id="nav1" class="navbar navbar-fixed-bottom" style="height: 50px">
+                   <div class="container" style="height: inherit">
+                       <div id="fixed-bar1" class="navbar-header" style="height: inherit">
+                           <div class="input-group" style="height: 50px">
+                               <input  id="sendtext1" class="form-control" style="height: 50px" placeholder="Enter Message" type="text">
+                               <span class="input-group-btn" style="height: 50px">
+                                   <!--
+                                   <button class="btn btn-warning btn-file" style="height: 50px">
+                                       <span class="glyphicon glyphicon-file"></span>
+                                       <input id="file1" type="file" onchange='add_file($(this).attr("id"))'>
+                                   </button>
+                                   -->
+                                   <button class="btn btn-info" style="height:50px" type="button" id="send_1" onclick="__send_public__()">
+                                       <span class="glyphicon glyphicon-arrow-right"></span>
+                                   </button>
 
-                                </span>
-                            </div>
-                        </div>
-                    </div>
-                </nav>
-            </div>
-        </div>
-    </div>
-    <div id="dialog-user"  class="alert alert-success" title="CHAT - Select username">
-    <p><input  id="username" class="form-control" placeholder="Username" type="text"></p>
-    </div>
-    <script src="js/jquery-1.11.1.min.js"></script>
-    <script src="js/jquery-migrate-1.2.1.min.js"></script>
-    <script src="js/jquery-ui.min.js"></script>
-    <script src="js/bootstrap.min.js"></script>
-    <script src="js/html5shiv.js"></script>
-    <script src="js/jquery.simpleWeather.min.js"></script>
-    <script src="js/weather-handle.js"></script>
-    <script src="js/cutils.js"></script>
-    <script src="js/sockets.js"></script>
-    <script src="js/client.js"></script>
-    <script>
-        toggle_panel("clock-heading","clock_panel");
-        toggle_panel("weather-heading", "weather_panel");
-        toggle_panel("clients-heading", "clients_panel");
-        $(function() {
-            $( "#dialog-user" ).dialog({
-                resizable: false,
-                modal: true,
-                buttons: {
-                    "Accept": function() {
-                        $("body").attr("name", $("#username").val());
-                        Connect();
-                        $( this ).dialog( "close" );
-                    },
-                    Cancel: function() {
-                        $( this ).dialog( "close" );
-                        process.exit(1);
+                               </span>
+                           </div>
+                       </div>
+                   </div>
+               </nav>
+           </div>
+       </div>
+   </div>
+   <div id="dialog-user"  class="alert alert-success" title="CHAT - Select username">
+   <p><input  id="username" class="form-control" placeholder="Username" type="text"></p>
+   </div>
+   <script src="js/jquery-1.11.1.min.js"></script>
+   <script src="js/jquery-migrate-1.2.1.min.js"></script>
+   <script src="js/jquery-ui.min.js"></script>
+   <script src="js/bootstrap.min.js"></script>
+   <script src="js/html5shiv.js"></script>
+   <script src="js/jquery.simpleWeather.min.js"></script>
+   <script src="js/weather-handle.js"></script>
+   <script src="js/cutils.js"></script>
+   <script src="js/sockets.js"></script>
+   <script src="js/client.js"></script>
+   <script>
+       toggle_panel("clock-heading","clock_panel");
+       toggle_panel("weather-heading", "weather_panel");
+       toggle_panel("clients-heading", "clients_panel");
+       $(function() {
+           $( "#dialog-user" ).dialog({
+               resizable: false,
+               modal: true,
+               buttons: {
+                   "Accept": function() {
+                       $("body").attr("name", $("#username").val());
+                       Connect();
+                       $( this ).dialog( "close" );
+                   },
+                   "Cancel": function() {
+                       $( this ).dialog( "close" );
+                       process.exit(1);
 
-                    }
-                }
-            });
-        });
-    </script>
+                   }
+               }
+           });
+       });
+   </script>
 </body>
 </html>
