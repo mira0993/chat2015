@@ -135,7 +135,13 @@ function add_user(id, user, connected, blocked){
             '</a><span id="block'+id+'" style="cursor:pointer; ' +
             'font-size:20px;color:'+blk_icon+';"' +
             'class="pull-right glyphicon glyphicon-ban-circle" '+
-            'onclick="toogle_block_icon('+id+')"></span><div class="media-body">' +
+            'onclick="toogle_block_icon('+id+')"></span>' +
+            '<span id="video'+id+'" style="cursor:pointer; ' +
+            'font-size:20px;color:#9A9A9A;" ' +
+            'class="pull-right glyphicon glyphicon-facetime-video" '+
+            'onmouseover="$(this).css(\'color\',\'#DE3939\')" ' +
+            'onmouseout="$(this).css(\'color\',\'#9A9A9A\')">' +
+            '</span><div class="media-body">' +
             '<h5 id="username_"'+
             id+' >'+user+'</h5><small class="text-muted">'+conn+
             '</small></div></div></div></li>';

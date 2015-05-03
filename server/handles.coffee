@@ -136,7 +136,7 @@ module.exports.dispatcher = (params) ->
 
 	dispatcher_file = () ->
 		stmt = params.db.prepare('update files set lock=1 where id = ?')
-		params.db.each('''select A.id, A.filename, A.chunks, B.username from files A
+		params.db.each('''select A.id, A.filename, A.chunks, B.id username_id from files A
 			inner join users B on A.sender=B.id
 			where A.receiver = ? and A.lock = 0''', params.data.username_id,
 			((err, row) ->
@@ -146,7 +146,7 @@ module.exports.dispatcher = (params) ->
 					resp.resp.messages.push(
 						"type": "file"
 						"file_id": row.id
-						"username": row.username
+						"username_id": row.username_id
 						"filename": row.filename
 						"chunks": row.chunks)
 					stmt.run(row.id, (err) ->
@@ -164,7 +164,7 @@ module.exports.dispatcher = (params) ->
 	dispatcher_private = () ->
 		stmt = params.db.prepare("""delete from messages_#{params.data.username_id}
 			where id = ?""")
-		params.db.each("""select A.id, B.username, A.message
+		params.db.each("""select A.id, B.id username_id, A.message
 			from messages_#{params.data.username_id} A
 			inner join users B on A.sender=B.id""",
 			((err, row) ->
@@ -173,7 +173,7 @@ module.exports.dispatcher = (params) ->
 				else
 					resp.resp.messages.push(
 						"type": "private"
-						"username": row.username
+						"username_id": row.username_id
 						"text": row.message)
 					stmt.run(row.id, (err) ->
 						if err
@@ -188,7 +188,7 @@ module.exports.dispatcher = (params) ->
 		)
 	
 	stmt = params.db.prepare('delete from push_public where id = ? and user = ?')
-	params.db.each('''select B.id, B.user, C.username, A.message
+	params.db.each('''select B.id, B.user, C.id username_id, A.message
 		from public_messages A
 		inner join push_public B on A.id=B.id
 		inner join users C on A.sender=C.id
@@ -199,7 +199,7 @@ module.exports.dispatcher = (params) ->
 			else
 				resp.resp.messages.push(
 					"type": "public"
-					"username": row.username
+					"username_id": row.username_id
 					"text": row.message)
 				stmt.run(row.id, row.user, (err) ->
 					if err
@@ -238,7 +238,7 @@ module.exports.list_users = (params) ->
 	clbk = (err, rows) ->
 		resp.resp = if err \
 			then {'response': "#{err}"} \
-			else {'response': 'OK', 'obj': rows}
+			else {'response': 'OK', 'type':'List', 'obj': rows}
 		send_response(resp)
 	if params.data.filter == ''
 		parameters = [common_qry, [params.data.username_id], clbk]
