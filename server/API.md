@@ -128,7 +128,7 @@ doesn't return anything.**
 *Send:*
 ```
 {
-  "type": "PUSH",
+  "type": "Push",
   "request_uuid": <UUID_FROM_CLIENT> (STRING),
   "username_id": <USERNAME_ID> [Receiver's id] (INTEGER)
 }
@@ -148,7 +148,7 @@ doesn't return anything.**
     ... (If it is a file is the following format: )
     {
       "type": "file",
-      "file_id": <FILE_ID> [Save it! It helps in retrieving the file chunks] (INTEGER),
+      "file_uuid": <FILE_UUID> [Save it! It helps in retrieving the file chunks] (INTEGER),
       "username": <SENDER_NAME> (STRING),
       "filename": <FILENAME> [Save it! It helps to save the file when you have all the chunks] (STRING),
       "chunks": <CHUNKS_NUMBER> [It helps to know how many times the socket needs to receive a chunk] (INTEGER)
@@ -172,8 +172,9 @@ doesn't return anything.**
 {
   "type": "File",
   "request_uuid": <UUID_FROM_CLIENT> (STRING),
+  "file_uuid": <FILE_UUID> (STRING),
   "filename": <FILENAME> (STRING),
-  "CHUNKS": <NUMBER_OF_CHUNKS> (INTEGER),
+  "chunks": <NUMBER_OF_CHUNKS> (INTEGER),
   "sender": <SENDER_ID> (INTEGER),
   "receiver": <RECEIVER_ID> (INTEGER)
 }
@@ -183,7 +184,7 @@ doesn't return anything.**
 {
   "response": "OK",
   "response_uuid": <UUID_FROM_CLIENT_RETURNED_BY_THE_SERVER> (STRING),
-  "file_id": <FILE_ID> [Save it! It helps in sending the chunks to the server] (INTEGER)
+  "file_uuid": <FILE_UUID> [Save it! It helps in sending the chunks to the server] (INTEGER)
 }
 ```
 
@@ -211,7 +212,7 @@ doesn't return anything.**
 ----
 ```
 {
-  "type": "Private_Message",
+  "type": "Public_Message",
   "request_uuid": <UUID_FROM_CLIENT> (STRING),
   "username_id": <SENDER_ID> (INTEGER),
   "message": <MESSAGE_TEXT> (STRING)
