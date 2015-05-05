@@ -4,8 +4,13 @@ sqlite3 = require("sqlite3");
 
 db = new sqlite3.Database(':memory:')
 var create_db = function () {
-    return db.run("create table if not exists acks(" +
-                  "uuid text unique, type text, msg text)")
+    db.run("create table if not exists acks(" +
+        "uuid text unique, type text, msg text)")
+    db.run("create table if not exists files(" +
+        "uuid text, path text, filename text, chunks integer)");
+    db.run("create table if not exists chunks(" +
+        "file text, ch_order integer, content text," +
+        "foreign key (file) references files (uuid))");
 };
 
 var me = dgram.createSocket('udp4');

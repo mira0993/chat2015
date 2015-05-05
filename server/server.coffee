@@ -32,7 +32,7 @@ create_db = () ->
 	db.run('''create table if not exists acks(
 		uuid text unique)''')
 	db.run('''create table if not exists files(
-		id integer primary key autoincrement,
+		uuid text,
 		filename text,
 		chunks integer,
 		lock integer,
@@ -42,11 +42,10 @@ create_db = () ->
 		foreign key (sender) references users (id),
 		foreign key (receiver) references users (id))''')
 	db.run('''create table if not exists chunks(
-		id integer primary key autoincrement,
-		file integer,
+		file text,
 		chunk_order integer,
 		content text,
-		foreign key (file) references files (id))''')
+		foreign key (file) references files (uuid))''')
 	db.run('''create table if not exists blacklist(
 		blocker integer,
 		blocked integer,
@@ -55,7 +54,6 @@ create_db = () ->
 		primary key (blocker, blocked))''')
 
 handle_incoming = (msg, clt) ->
-	console.log(msg);
 	params = 
 		"db": db 
 		"srv": srv

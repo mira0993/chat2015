@@ -135,8 +135,8 @@ module.exports.dispatcher = (params) ->
 	resp.resp = {"response": "OK", "messages": new Array()}
 
 	dispatcher_file = () ->
-		stmt = params.db.prepare('update files set lock=1 where id = ?')
-		params.db.each('''select A.id, A.filename, A.chunks, B.id username_id from files A
+		stmt = params.db.prepare('update files set lock=1 where uuid = ?')
+		params.db.each('''select A.uuid, A.filename, A.chunks, B.id username_id from files A
 			inner join users B on A.sender=B.id
 			where A.receiver = ? and A.lock = 0''', params.data.username_id,
 			((err, row) ->
@@ -145,11 +145,11 @@ module.exports.dispatcher = (params) ->
 				else
 					resp.resp.messages.push(
 						"type": "file"
-						"file_id": row.id
+						"file_uuid": row.uuid
 						"username_id": row.username_id
 						"filename": row.filename
 						"chunks": row.chunks)
-					stmt.run(row.id, (err) ->
+					stmt.run(row.uuid, (err) ->
 						if err
 							console.log(err)
 					)
@@ -159,7 +159,6 @@ module.exports.dispatcher = (params) ->
 					console.log(err)
 				send_response(resp)
 			)
-		return
 
 	dispatcher_private = () ->
 		stmt = params.db.prepare("""delete from messages_#{params.data.username_id}
@@ -281,8 +280,7 @@ module.exports.public_message = (params) ->
 	store_public = (id) ->
 		stmt = params.db.prepare("""insert into push_public
 			values(#{id}, ?)""")
-		params.db.each('''select A.id,
-			case when B.blocker is null then 0 else 1 end as permission
+		params.db.each('''select A.id, B.blocked
 			from users A left outer join blacklist B on A.id=B.blocker
 			where A.id != ?''',
 			params.data.username_id,
@@ -290,7 +288,7 @@ module.exports.public_message = (params) ->
 				if err
 					console.log(err)
 				else if row
-					if row.permission == 1
+					if row.blocked and row.blocked == params.data.username_id
 						console.log("Blocker = #{row.id} -"
 							"Blocked = #{params.data.username_id}")
 					else
@@ -329,16 +327,16 @@ module.exports.receive_ack = (params) ->
 module.exports.receive_file = (params) ->
 	resp = get_common_params(params)
 	stmt = params.db.prepare('''insert into files
-		(filename, chunks, lock, transferred, sender, receiver)
-		values (?, ?, 0, 0, ?, ?)''')
-	stmt.run(params.data.filename, params.data.chunks, params.data.sender,
-		params.data.receiver,
+		(uuid, filename, chunks, lock, transferred, sender, receiver)
+		values (?, ?, ?, 0, 0, ?, ?)''')
+	stmt.run(params.data.file_uuid, params.data.filename, params.data.chunks,
+		params.data.sender, params.data.receiver,
 		((err) ->
 			if err
 				resp.err = err
 				send_error(resp)
 			else
-				resp.resp = {'response': 'OK', 'file_id': this.lastID}
+				resp.resp = {'response': 'OK', 'file_uuid': params.data.file_uuid}
 				send_response(resp)
 		)
 	)
@@ -346,48 +344,58 @@ module.exports.receive_file = (params) ->
 module.exports.save_chunk = (params) ->
 	resp = get_common_params(params)
 	save_finished = () ->
-		stmt = params.db.prepare('update files set transferred=1 where id = ?')
-		stmt.run(params.data.file_id, (err) ->
+		stmt = params.db.prepare('update files set transferred=1 where uuid = ?')
+		stmt.run(params.data.file_uuid, (err) ->
 			if err
 				console.log(err)
 		)
 
 	stmt = params.db.prepare('''insert into chunks
 		(file, chunk_order, content) values (?, ?, ?)''')
-	stmt.run(params.data.file_id, params.data.order, params.data.content,
+	stmt.run(params.data.file_uuid, params.data.order, params.data.content,
 		(err) ->
 			if err
 				resp.err = err
 				send_error(resp)
 			else
-				resp.resp = {'response': 'OK'}
+				resp.resp = {'response': 'OK', 'file_uuid': params.data.file_uuid}
 				send_response(resp)
-				params.db.get('''select case when count(B.id) = A.chunks
+				params.db.get('''select case when count(B.file) = A.chunks
 					then 0 else 1 end as finished
-					from files A inner join chunks B on A.id=B.file''',
+					from files A inner join chunks B on A.uuid=B.file
+					where A.uuid = ?''', params.data.file_uuid,
 					(err, row) ->
-						if row.finished == 0
+						if (err)
+							console.log(err)
+						else if row and row.finished == 0
 							save_finished()
 				)
 	)
 
 module.exports.send_chunk = (params) ->
 	resp = get_common_params(params)
-	stmt = params.db.prepare('delete from chunks where id = ?')
-	params.db.get('''select B.id, B.content from files A
-		inner join chunks B on A.id=B.file
-		where A.id = ? and A.lock = 1 and B.chunk_order = ?''',
-		params.data.file_id, params.data.num_part, (err, row) ->
+	stmt = params.db.prepare('delete from chunks where file = ? and chunk_order = ?')
+	params.db.get('''select B.content, B.chunk_order from files A
+		inner join chunks B on A.uuid=B.file where A.uuid = ? and A.lock = 1
+		order by chunk_order limit 1''',
+		params.data.file_uuid, (err, row) ->
 			if err
 				resp.err = err
 				send_error(resp)
-			else
-				resp.resp = {'response': 'OK', 'content': row.content}
+			else if (row)
+				resp.resp = 
+					'response': 'OK'
+					'content': row.content
+					'order': row.chunk_order
+					'file_uuid': params.data.file_uuid
 				send_response(resp)
-				stmt.run(row.id, (err) ->
+				stmt.run(params.data.file_uuid, row.chunk_order, (err) ->
 					if err
 						console.log(err)
 				)
+			else
+				resp.err = 'The file doesn\'t exist.'
+				send_error(resp)
 	)
 
 module.exports.unblock_user = (params) ->

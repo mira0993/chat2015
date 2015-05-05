@@ -113,8 +113,8 @@ class TestServer(unittest2.TestCase):
 		data = self._send_recv(data)
 		self.assertEqual(data["response"], "OK")
 		self.assertEqual(data["messages"][0]["type"], "public")
-		self.assertEqual(data["messages"][0]["username"],
-			TestServer.usernames[0])
+		self.assertEqual(data["messages"][0]["username_id"],
+			TestServer.username_ids[0])
 		self.assertEqual(data["messages"][0]["text"], TestServer.messages[0])
 
 	def test_04_not_receive_none(self):
@@ -147,8 +147,8 @@ class TestServer(unittest2.TestCase):
 		data = self._send_recv(data, 1)
 		self.assertEqual(data["response"], "OK")
 		self.assertEqual(data["messages"][0]["type"], "private")
-		self.assertEqual(data["messages"][0]["username"],
-			TestServer.usernames[1])
+		self.assertEqual(data["messages"][0]["username_id"],
+			TestServer.username_ids[1])
 		self.assertEqual(data["messages"][0]["text"], TestServer.messages[1])
 
 	def test_07_connect_third(self):
@@ -213,6 +213,7 @@ class TestServer(unittest2.TestCase):
 		self.assertEqual(len(data["messages"]), 0)
 
 	def test_11_send_file(self):
+		f_uuid = str(uuid.uuid4())
 		filename = TestServer.filenames[0]
 		#filename = TestServer.filenames[1]
 		byte_string = None
@@ -234,26 +235,28 @@ class TestServer(unittest2.TestCase):
 		data = {
 			"type": "File",
 			"filename": filename,
+			"file_uuid": f_uuid,
 			"chunks": chunk_length,
 			"sender": TestServer.username_ids[0],
 			"receiver": TestServer.username_ids[1]
 		}
 		data = self._send_recv(data)
 		self.assertEqual(data["response"], "OK")
-		self.assertEqual(type(data["file_id"]), int)
+		self.assertEqual(data["file_uuid"], f_uuid)
 
 		chunk_data = {
 			"type": "S_Chunk",
-			"file_id": data["file_id"],
+			"file_uuid": f_uuid,
 			"content": None,
 			"order": -1
 		}
+
 		for i in range(0, chunk_length):
 			chunk_data["order"] = i
 			chunk_data["content"] = chunks[i]
 			data = self._send_recv(chunk_data)
 			self.assertEqual(data["response"], "OK")
-
+	
 	def test_12_push_file(self):
 		user_id = 1
 		data = {
@@ -261,6 +264,7 @@ class TestServer(unittest2.TestCase):
 			"username_id": TestServer.username_ids[user_id],
 		}
 		file_info = self._send_recv(data, user_id)["messages"][0]
+		f_uuid = file_info["file_uuid"]
 
 		# Comprobamos si realmente lo bloqueo y ya no regresa un mensaje pendiente
 		rep_data = {
@@ -274,7 +278,7 @@ class TestServer(unittest2.TestCase):
 		# Continuamos con la descarga
 		data = {
 			"type": "R_Chunk",
-			"file_id": file_info["file_id"],
+			"file_uuid": f_uuid,
 			"num_part": -1
 		}
 		content = list()
@@ -337,13 +341,14 @@ class TestServer(unittest2.TestCase):
 				self.assertEqual(item["blocked"], -1)
 
 	def test_16_blocked_private_message(self):
+		user_id = 2
 		data = {
 			"type": "Private_Message",
-			"username_id": TestServer.username_ids[2],
+			"username_id": TestServer.username_ids[user_id],
 			"receiver_id": TestServer.username_ids[0],
 			"message": TestServer.messages[1]
 		}
-		data = self._send_recv(data, 1)
+		data = self._send_recv(data, user_id)
 		self.assertEqual(data["response"], "OK")
 
 	def test_17_not_receive_message(self):
@@ -358,9 +363,10 @@ class TestServer(unittest2.TestCase):
 
 	def test_18_send_public_message(self):
 		# Probamos a mandar un mensaje publico
+		user_id = 2
 		data = {
 			"type": "Public_Message",
-			"username_id": TestServer.username_ids[2],
+			"username_id": TestServer.username_ids[user_id],
 			"message": TestServer.messages[3]
 		}
 		data = self._send_recv(data)
@@ -385,11 +391,51 @@ class TestServer(unittest2.TestCase):
 		data = self._send_recv(data, 1)
 		self.assertEqual(data["response"], "OK")
 		self.assertEqual(data["messages"][0]["type"], "public")
-		self.assertEqual(data["messages"][0]["username"],
-			TestServer.usernames[2])
+		self.assertEqual(data["messages"][0]["username_id"],
+			TestServer.username_ids[2])
 		self.assertEqual(data["messages"][0]["text"], TestServer.messages[3])
 
-	def test_19_unblock(self):
+	def test_20_send_private_to_blocker(self):
+		user_id = 1
+		data = {
+			"type": "Private_Message",
+			"username_id": TestServer.username_ids[user_id],
+			"receiver_id": TestServer.username_ids[0],
+			"message": TestServer.messages[1]
+		}
+		data = self._send_recv(data, user_id)
+		self.assertEqual(data["response"], "OK")
+
+	def test_21_blocker_receive_private(self):
+		data = {
+			"type": "Push",
+			"username_id": TestServer.username_ids[0],
+		}
+		data = self._send_recv(data)
+		self.assertEqual(data["response"], "OK")
+		self.assertEqual(len(data["messages"]), 1)
+		self.assertEqual(data["messages"][0]["username_id"], TestServer.username_ids[1])
+
+	def test_22_send_public_from_not_blocked(self):
+		user_id = 1
+		data = {
+			"type": "Public_Message",
+			"username_id": TestServer.username_ids[user_id],
+			"message": TestServer.messages[3]
+		}
+		data = self._send_recv(data)
+		self.assertEqual(data["response"], "OK")
+
+	def test_23_receive_public_from_blocker(self):
+		data = {
+			"type": "Push",
+			"username_id": TestServer.username_ids[0],
+		}
+		data = self._send_recv(data)
+		self.assertEqual(data["response"], "OK")
+		self.assertEqual(len(data["messages"]), 1)
+
+	def test_24_unblock(self):
 		data = {
 			"type": "Unblock",
 			"blocker": TestServer.username_ids[0],
@@ -398,7 +444,7 @@ class TestServer(unittest2.TestCase):
 		data = self._send_recv(data)
 		self.assertEqual(data["response"], "OK")
 
-	def test_20_unblocked_private_message(self):
+	def test_25_unblocked_private_message(self):
 		data = {
 			"type": "Private_Message",
 			"username_id": TestServer.username_ids[2],
@@ -408,7 +454,7 @@ class TestServer(unittest2.TestCase):
 		data = self._send_recv(data, 1)
 		self.assertEqual(data["response"], "OK")
 
-	def test_21_receive_message_from_unblocked(self):
+	def test_26_receive_message_from_unblocked(self):
 		# Limpiamos el mensaje que quedo disponible
 		data = {
 			"type": "Push",
@@ -417,8 +463,8 @@ class TestServer(unittest2.TestCase):
 		data = self._send_recv(data)
 		self.assertEqual(data["response"], "OK")
 		self.assertEqual(data["messages"][0]["type"], "private")
-		self.assertEqual(data["messages"][0]["username"],
-			TestServer.usernames[2])
+		self.assertEqual(data["messages"][0]["username_id"],
+			TestServer.username_ids[2])
 		self.assertEqual(data["messages"][0]["text"], TestServer.messages[1])
 	
 	@classmethod

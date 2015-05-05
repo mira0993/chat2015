@@ -347,3 +347,184 @@ var receive = function(json){
             callback);
 };
 
+/*
+    Guarda un archivo a partir de un file_uuid pasado como parametro,
+    esto una vez que haya recibido completamente el archivo desde el servidor
+*/
+var _save_file = function (f_uuid) {
+    var complete_saving = function (filename) {
+        var tmp = '1_' + filename;
+        var stream = fs.createWriteStream(tmp);
+        stream.once('open', function(fd) {
+            db.each('select content from chunks where file = ? order by ch_order asc',
+                f_uuid, function (err, row) {
+                    if (err)
+                        console.log(err);
+                    stream.write(new Buffer(row.content, 'base64'));
+                }, function (err, num_rows) {
+                    if (err)
+                        console.log(err);
+                    stream.end();
+                    console.log(num_rows);
+                }
+            );
+        });
+    }
+    db.get('select filename from files where uuid = ?', f_uuid, function (err, row) {
+        if (err)
+            console.log(err);
+        else if (row)
+            complete_saving(row.filename);
+    })
+    
+}
+
+/*
+    Envía el header del archivo y crea las particiones a ser enviadas
+*/
+var _send_header = function (path, cbk_chunks) {
+    var CHUNK_SIZE = 65000;
+    var r_uuid = uuid.v4();
+    var f_uuid = uuid.v4();
+    cbk_params = new Object();
+    fs.readFile(path, function (err, data) {
+        var base64data = new Buffer(data).toString('base64');
+        var limit = Math.floor(base64data.length / CHUNK_SIZE);
+        if (limit < (base64data.length / CHUNK_SIZE))
+            limit++;
+        cbk_params.chunks = limit;
+        cbk_params.count = 0;
+        var stmt = db.prepare('insert into files values (?, ?, ?, ?)');
+        var r_data = {type: 'File', request_uuid: r_uuid, file_uuid: f_uuid,
+            filename: path, chunks: limit, sender: user_ids[0], receiver: user_ids[1]};
+        send_response(r_data);
+        stmt.run(f_uuid, path, path, limit, function (err) {
+            if (!err) {
+                stmt = db.prepare('insert into chunks values (?, ?, ?)');
+                var store_chunk = function (i) {
+                    var init = i * CHUNK_SIZE;
+                    var end = init + CHUNK_SIZE;
+                    if (end > base64data.length)
+                        end = base64data.length;
+                    stmt.run(f_uuid, i,
+                        base64data.substring(init, end),
+                        function (err) {
+                            if (err)
+                                error(err);
+                            else if (i < (limit - 1))
+                                store_chunk(i + 1);
+                            else if (i == limit)
+                                cbk_chunks();
+                        });
+                }
+                store_chunk(0);
+            }
+        });
+    });
+}
+
+/*
+    Cada vez que recibas el response de que un chunk ya se envio deberias
+    mandar llamar esta funcion pasandole el json, porque va a tomar cual fue el
+    que se envio y proceder a enviar el siguiente
+*/
+var send_file = function (data) {
+    var f_uuid = data.file_uuid;
+    var r_uuid = uuid.v4();
+    if (cbk_params.count < cbk_params.chunks) {
+        db.get('select ch_order, content from chunks where file = ? order by ch_order limit 1',
+            f_uuid,
+            function(err, row) {
+                if (err)
+                    error(err);
+                else if (row) {
+                    var r_data = {type: 'S_Chunk', request_uuid: r_uuid, file_uuid: f_uuid,
+                        order: row.ch_order, content: row.content};
+                    send_response(r_data);
+                    var stmt = db.prepare('delete from chunks where file = ? and ch_order = ?');
+                    stmt.run(f_uuid, row.ch_order);
+                    db.get('select count(*) count from chunks where file = ?', f_uuid,
+                        function (err, row) {
+                            if (!err && row) {
+                                if (row.count == 0) {
+                                    stmt = db.prepare('delete from files where uuid = ?');
+                                    stmt.run(f_uuid, function (err) {
+                                        if (err)
+                                            error(err);
+                                        else
+                                            return; // Aqui ya termino
+                                    });
+                                }
+                            } else {
+                                error(err);
+                            }
+                        }
+                    );
+                }
+            });
+    }
+    cbk_params.count++;
+}
+
+/*
+    Envia el siguiente push para recibir otro chunk, esta no es necesario modificarla
+    No hay necesidad de mandarla llamar porque ya lo hago yo, solo es funcion auxiliar
+ */
+var _send_push_chunk = function (f_uuid) {
+    var r_data = {type: 'R_Chunk', request_uuid: uuid.v4(), file_uuid: f_uuid};
+    send_response(r_data);
+}
+
+/*
+    Recibe el encabezado del archivo, pero ahorita solo lee el primer mensaje
+    Hay que pasarle de alguna manera el puro mensaje de archivo o pasarle en 
+    que index esta
+*/
+var receive_header = function (data) {
+    if (data.messages && data.messages.length > 0) {
+        // Necesitas modificar la posición donde esta el mensaje
+        var msg = data.messages[0];
+        var stmt = db.prepare('insert into files values(?, ?, ?, ?)');
+        stmt.run(msg.file_uuid, msg.filename, msg.filename, msg.chunks,
+            function (err) {
+                if (err)
+                    error(err);
+                else {
+                    // Aqui es la primera llamada al push de chunks despues de recibir el header
+                    _send_push_chunk(msg.file_uuid);
+                }
+            }
+        );
+    }
+}
+
+/*
+    Deberias mandarla llamar cada vez que se recibe un chunk para que se almacene
+    en la base de datos y posteiormente ya se esta mandando llamra para que envie 
+    el siguiente push de chunks
+*/
+var receive_chunk = function (data) {
+    if (!data.file_uuid)
+        return;
+    var stmt = db.prepare('insert into chunks values(?, ?, ?)');
+    stmt.run(data.file_uuid, data.order, data.content, function (err) {
+        if (err)
+            error(err);
+        else {
+            db.get('select case when count(B.ch_order) == A.chunks then 0 else 1 end as finished ' +
+                'from files A inner join chunks B on A.uuid=B.file where A.uuid = ?', data.file_uuid,
+                function (err, row) {
+                    if (err)
+                        error(err)
+                    else if (row) {
+                        // Una vez descargado ya se esta mandando llamar el save
+                        if (row.finished == 0)
+                            _save_file(data.file_uuid);
+                        else
+                            _send_push_chunk(data.file_uuid);
+                    }
+                }
+            );
+        }
+    });
+}
