@@ -23,12 +23,27 @@ var LIST_USER_LOCK = true;
 var uuid = require('uuid');
 var gui = require('nw.gui');
 var win = gui.Window.get();
+var cp = require('child_process');
+var child_server;
+
+if (gui.App.argv.indexOf('-s') >= 0)
+    child_server = cp.fork('', {execPath: 'coffee', execArgv: ['../server/server.coffee']})
+        
 //------------------------------------------------NODE FUNCTIONS ------------------------------------------------------//
 
+if (child_server) {
+    // child.send('Hi Child!'); // Siempre que quieras enviarle algo al servidor
+    child_server.on('message', function (msg) {
+      // Cuando quieras leer un mensaje que te haya enviado el servidor
+    });
+}
+
 win.on('close', function() {
-    this.hide();                // Pretend to be closed already
-    console.log("Closing...");
     __disconnect__();
+    this.hide();                // Pretend to be closed already
+    wlog.info("Closing...");
+    if (child_server)
+        child_server.kill();
 });
 
 var watchdog = function(uuid){
@@ -37,17 +52,17 @@ var watchdog = function(uuid){
         db.get('select * from acks where uuid = ?', uuid,
                 function(err, row){
                     if(err){
-                        console.log('ERROR: That acknowledgement doesn\'t exist');
+                        wlog.error('ERROR: That acknowledgement doesn\'t exist');
                     }else if(row){
                         send_response(JSON.parse(row["msg"].toString('utf-8')));
                         tries++;
                         if(tries <= MAX_TRIES)
                             setTimeout(cycle,1500);
                         else {
-                            console.log("LIMIT RETRIES!");
+                            wlog.warn("LIMIT RETRIES!");
                             CNT_LOST++;
                             if(CNT_LOST > MAX_LOST){
-                                console.log("LOST SERVER CONNECTION!");
+                                wlog.error("LOST SERVER CONNECTION!");
                                 win.close(true);
                             }
                         }
@@ -83,13 +98,13 @@ var insert_db = function(json){
     var tries = 0;
     var callback = function(err){
         if(err){
-            console.log("ERROR SAVING UUID");
+            wlog.error("ERROR SAVING UUID");
             if (tries < MAX_TRIES) {
                 tries++;
                 callback();
             }
         }else{
-            console.log("saved "+json["request_uuid"]);
+            wlog.debug("saved "+json["request_uuid"]);
             return send_response(json);
         }
     }
@@ -194,7 +209,7 @@ var __un_block__ = function(html_id, type){
 }
 
 var __download__ = function (file_id){
-    console.log("DOWNLOAD");
+    wlog.debug("DOWNLOAD");
     //When yo have downloaded it, execute this to open a external window
     //gui.Shell.showItemInFolder('filename');
 }
@@ -258,7 +273,7 @@ var recv_list = function (json){
 };
 
 var recv_push = function(json){
-    console.log("PUSH");
+    wlog.debug("PUSH");
     for(var i in json["messages"]){
         var m = json["messages"][i];
         var html_id = (Number(m["username_id"]) + 1);
@@ -276,7 +291,7 @@ var recv_push = function(json){
                 LIST_USERS[m["username_id"]]["username"],
                 m["text"], "time", false);
         }else if(m["type"] == "file"){
-            console.log("FILE");
+            wlog.debug("FILE");
             add_message_file(html_id,
                 LIST_USERS[m["username_id"]]["username"],
                 "filename",m["file_id"],"time", false);
@@ -292,13 +307,13 @@ var receive = function(json){
             db.run('delete from acks where uuid = ?', json["response_uuid"],
                 function (err){
                     if(err){
-                        console.log("ERROR DELETE ACK");
+                        wlog.error("ERROR DELETE ACK");
                         if(tries < MAX_TRIES) {
                             callback();
                             tries++;
                         }
                     }else{
-                        console.log("DONE DELETE");
+                        wlog.debug("DONE DELETE");
                     }
 
                 });
@@ -359,20 +374,20 @@ var _save_file = function (f_uuid) {
             db.each('select content from chunks where file = ? order by ch_order asc',
                 f_uuid, function (err, row) {
                     if (err)
-                        console.log(err);
+                        wlog.error(err);
                     stream.write(new Buffer(row.content, 'base64'));
                 }, function (err, num_rows) {
                     if (err)
-                        console.log(err);
+                        wlog.error(err);
                     stream.end();
-                    console.log(num_rows);
+                    wlog.debug(num_rows);
                 }
             );
         });
     }
     db.get('select filename from files where uuid = ?', f_uuid, function (err, row) {
         if (err)
-            console.log(err);
+            wlog.error(err);
         else if (row)
             complete_saving(row.filename);
     })

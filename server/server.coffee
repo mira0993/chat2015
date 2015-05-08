@@ -1,37 +1,35 @@
 dgram = require('dgram')
-sqlite3 = require('sqlite3')
+cp = require('child_process')
 hdl = require('./handles')
-
 PORT = 8000
 HOST = '127.0.0.1'
 srv = dgram.createSocket('udp4')
-db = new sqlite3.Database(':memory:')
-#db = new sqlite3.Database('test.db')
+
 
 create_db = () ->
-	db.run('''create table if not exists users(
+	hdl.db.run('''create table if not exists users(
 		id integer primary key autoincrement,
 		username text unique)''')
-	db.run('''create table if not exists sessions(
+	hdl.db.run('''create table if not exists sessions(
 		id integer primary key,
 		ip_address text,
 		port integer,
 		foreign key (id) references users (id))''')
-	db.run('''create table if not exists public_messages(
+	hdl.db.run('''create table if not exists public_messages(
 		id integer primary key autoincrement,
 		sender integer,
 		dtime text,
 		message text,
 		foreign key (sender) references users (id))''')
-	db.run('''create table if not exists push_public(
+	hdl.db.run('''create table if not exists push_public(
 		id integer,
 		user integer,
 		primary key (id, user),
 		foreign key (id) references public_messages (id),
 		foreign key (user) references users (id))''')
-	db.run('''create table if not exists acks(
+	hdl.db.run('''create table if not exists acks(
 		uuid text unique)''')
-	db.run('''create table if not exists files(
+	hdl.db.run('''create table if not exists files(
 		uuid text,
 		filename text,
 		chunks integer,
@@ -41,12 +39,12 @@ create_db = () ->
 		receiver integer,
 		foreign key (sender) references users (id),
 		foreign key (receiver) references users (id))''')
-	db.run('''create table if not exists chunks(
+	hdl.db.run('''create table if not exists chunks(
 		file text,
 		chunk_order integer,
 		content text,
 		foreign key (file) references files (uuid))''')
-	db.run('''create table if not exists blacklist(
+	hdl.db.run('''create table if not exists blacklist(
 		blocker integer,
 		blocked integer,
 		foreign key (blocker) references users (id),
@@ -55,7 +53,6 @@ create_db = () ->
 
 handle_incoming = (msg, clt) ->
 	params = 
-		"db": db 
 		"srv": srv
 		"clt": clt
 		"data": JSON.parse(msg.toString('utf-8'))
@@ -81,3 +78,8 @@ srv.on('message', handle_incoming)
 
 create_db()
 srv.bind(PORT, HOST)
+
+process.on('message', (msg) ->
+	# Aqui podemos leer los mensajes que nos envie el cliente
+	# process.send('Hi parent') # Aqui podemos mandarle mensajes al cliente
+)

@@ -1,8 +1,21 @@
+sqlite3 = require('sqlite3')
+w = require('winston')
+
+db = new sqlite3.Database(':memory:')
+module.exports.db = db
+#db = new sqlite3.Database('test.db')
+
 MAX_TRIES = 5
+logger_options =
+	colorize: true
+	prettyPrint: true
+	level: 'debug'
+
+w.remove(w.transports.Console);
+w.add(w.transports.Console, logger_options)
 
 get_common_params = (params) ->
 	resp =
-		"db": params.db
 		"srv": params.srv
 		"clt": params.clt
 		"request_uuid": params.data.request_uuid
@@ -14,7 +27,7 @@ get_actual_dt_string = () ->
 
 send_response = (params) ->
 	store_in_db = () ->
-		stmt = params.db.prepare('insert into acks values(?)')
+		stmt = db.prepare('insert into acks values(?)')
 		stmt.run(params.request_uuid, (err) ->
 			if err
 				setTimeout(store_in_db, 500)
@@ -40,11 +53,11 @@ watchdog = (params) ->
 	timeout = 1000
 	times = 0
 	cycle = () ->
-		params.db.get('select uuid from acks where uuid = ?',
+		db.get('select uuid from acks where uuid = ?',
 			params.resp.response_uuid,
 			(err, row) ->
 				if err
-					console.log('ERROR: That acknowledgement doesn\'t exist')
+					w.error('ERROR: That acknowledgement doesn\'t exist')
 				else if row
 					resp = JSON.stringify(params.resp)
 					params.srv.send(resp, 0, resp.length, params.clt.port,
@@ -57,7 +70,7 @@ watchdog = (params) ->
 
 module.exports.block_user = (params) ->
 	resp = get_common_params(params)
-	stmt = params.db.prepare('''insert into blacklist values (?, ?)''')
+	stmt = db.prepare('''insert into blacklist values (?, ?)''')
 	stmt.run(params.data.blocker, params.data.blocked, (err) ->
 		if err
 			resp.err = err
@@ -70,7 +83,7 @@ module.exports.block_user = (params) ->
 module.exports.connect_user = (params) ->
 	resp = get_common_params(params)
 	create_session = (id) ->
-		stmt = params.db.prepare('''insert into sessions
+		stmt = db.prepare('''insert into sessions
 			(id, ip_address, port) values (?, ?, ?)''')
 		stmt.run(id, params.clt.address, params.clt.port,
 			(err) ->
@@ -83,7 +96,7 @@ module.exports.connect_user = (params) ->
 		)
 
 	create_inbox = (id) ->
-		params.db.run("""create table if not exists messages_#{id}(
+		db.run("""create table if not exists messages_#{id}(
 			id integer primary key autoincrement,
 			sender integer,
 			dtime text,
@@ -94,7 +107,7 @@ module.exports.connect_user = (params) ->
 					resp.err = err
 					send_error(resp)
 				else
-					params.db.get('select id from sessions where id = ?', id,
+					db.get('select id from sessions where id = ?', id,
 						(err, row) ->
 							if row
 								resp.resp = 
@@ -110,7 +123,7 @@ module.exports.connect_user = (params) ->
 		)
 
 	# Comprobamos si ya existe el usuario
-	params.db.get('select id from users where username = ?', params.data.username,
+	db.get('select id from users where username = ?', params.data.username,
 		(err, row) ->
 			if row
 				# Si existe pasamos su id actual
@@ -120,7 +133,7 @@ module.exports.connect_user = (params) ->
 				send_error(resp)
 			else
 				# Si no existe lo creamos
-				stmt = params.db.prepare('insert into users (username) values (?)')
+				stmt = db.prepare('insert into users (username) values (?)')
 				stmt.run(params.data.username, (err) ->
 					if err
 						resp.err = err
@@ -135,13 +148,13 @@ module.exports.dispatcher = (params) ->
 	resp.resp = {"response": "OK", "messages": new Array()}
 
 	dispatcher_file = () ->
-		stmt = params.db.prepare('update files set lock=1 where uuid = ?')
-		params.db.each('''select A.uuid, A.filename, A.chunks, B.id username_id from files A
+		stmt = db.prepare('update files set lock=1 where uuid = ?')
+		db.each('''select A.uuid, A.filename, A.chunks, B.id username_id from files A
 			inner join users B on A.sender=B.id
 			where A.receiver = ? and A.lock = 0''', params.data.username_id,
 			((err, row) ->
 				if err
-					console.log(err)
+					w.error(err)
 				else
 					resp.resp.messages.push(
 						"type": "file"
@@ -151,24 +164,24 @@ module.exports.dispatcher = (params) ->
 						"chunks": row.chunks)
 					stmt.run(row.uuid, (err) ->
 						if err
-							console.log(err)
+							w.error(err)
 					)
 			),
 			(err, num_rows) ->
 				if err
-					console.log(err)
+					w.error(err)
 				send_response(resp)
 			)
 
 	dispatcher_private = () ->
-		stmt = params.db.prepare("""delete from messages_#{params.data.username_id}
+		stmt = db.prepare("""delete from messages_#{params.data.username_id}
 			where id = ?""")
-		params.db.each("""select A.id, B.id username_id, A.message
+		db.each("""select A.id, B.id username_id, A.message
 			from messages_#{params.data.username_id} A
 			inner join users B on A.sender=B.id""",
 			((err, row) ->
 				if err
-					console.log(err)
+					w.error(err)
 				else
 					resp.resp.messages.push(
 						"type": "private"
@@ -176,25 +189,25 @@ module.exports.dispatcher = (params) ->
 						"text": row.message)
 					stmt.run(row.id, (err) ->
 						if err
-							console.log(err)
+							w.error(err)
 					)
 			),
 			((err, num_rows) ->
 				if err
-					console.log(err)
+					w.error(err)
 				dispatcher_file()
 			)
 		)
 	
-	stmt = params.db.prepare('delete from push_public where id = ? and user = ?')
-	params.db.each('''select B.id, B.user, C.id username_id, A.message
+	stmt = db.prepare('delete from push_public where id = ? and user = ?')
+	db.each('''select B.id, B.user, C.id username_id, A.message
 		from public_messages A
 		inner join push_public B on A.id=B.id
 		inner join users C on A.sender=C.id
 		where B.user = ?''', params.data.username_id,
 		((err, row) ->
 			if err
-				console.log(err)
+				w.error(err)
 			else
 				resp.resp.messages.push(
 					"type": "public"
@@ -202,19 +215,19 @@ module.exports.dispatcher = (params) ->
 					"text": row.message)
 				stmt.run(row.id, row.user, (err) ->
 					if err
-						console.log(err)
+						w.error(err)
 				)
 		),
 		((err, num_rows) ->
 			if err
-				console.log(err)
+				w.error(err)
 			dispatcher_private()
 		)
 	)
 
 module.exports.disconnect_user = (params) ->
 	resp = get_common_params(params)
-	stmt = params.db.prepare('delete from sessions where id = ?')
+	stmt = db.prepare('delete from sessions where id = ?')
 	stmt.run(params.data.username_id, (err) ->
 		if err
 			resp.err = err
@@ -244,7 +257,7 @@ module.exports.list_users = (params) ->
 	else
 		parameters = ["#{common_qry} where username  like ?",
 			[params.data.username_id, "%#{params.data.filter}%"], clbk]
-	params.db.all.apply(params.db, parameters)
+	db.all.apply(db, parameters)
 
 module.exports.private_message = (params) ->
 	resp = get_common_params(params)
@@ -253,7 +266,7 @@ module.exports.private_message = (params) ->
 		send_response(resp)
 
 	save_private = () ->
-		stmt = params.db.prepare("""insert into
+		stmt = db.prepare("""insert into
 			messages_#{params.data.receiver_id} (sender, dtime, message)
 			values (?, ?, ?)""")
 		stmt.run(params.data.username_id, get_actual_dt_string(), params.data.message,
@@ -263,13 +276,13 @@ module.exports.private_message = (params) ->
 					send_error(resp)
 		)
 
-	params.db.get('select blocked from blacklist where blocker = ? and blocked = ?',
+	db.get('select blocked from blacklist where blocker = ? and blocked = ?',
 		params.data.receiver_id, params.data.username_id,
 		(err, row) ->
 			if (not err) and (not row)
 				save_private()
 			else
-				console.log("Blocker = #{params.data.receiver_id} -"
+				w.debug("Blocker = #{params.data.receiver_id} -"
 					"Blocked = #{params.data.username_id}")
 			success_resp()
 	)
@@ -278,32 +291,32 @@ module.exports.private_message = (params) ->
 module.exports.public_message = (params) ->
 	resp = get_common_params(params)
 	store_public = (id) ->
-		stmt = params.db.prepare("""insert into push_public
+		stmt = db.prepare("""insert into push_public
 			values(#{id}, ?)""")
-		params.db.each('''select A.id, B.blocked
+		db.each('''select A.id, B.blocked
 			from users A left outer join blacklist B on A.id=B.blocker
 			where A.id != ?''',
 			params.data.username_id,
 			((err, row) ->
 				if err
-					console.log(err)
+					w.error(err)
 				else if row
 					if row.blocked and row.blocked == params.data.username_id
-						console.log("Blocker = #{row.id} -"
+						w.debug("Blocker = #{row.id} -"
 							"Blocked = #{params.data.username_id}")
 					else
 						stmt.run(row.id, (err) ->
 							if err
-								console.log(err)
+								w.error(err)
 						)
 			),
 			((err, num_rows) ->
 				if err
-					console.log(err)
+					w.error(err)
 			)
 		)
 
-	stmt = params.db.prepare('''insert into public_messages
+	stmt = db.prepare('''insert into public_messages
 		(sender, dtime, message) values (?, ?, ?)''')
 	stmt.run(params.data.username_id, get_actual_dt_string(), params.data.message,
 		(err) ->
@@ -318,15 +331,15 @@ module.exports.public_message = (params) ->
 
 module.exports.receive_ack = (params) ->
 	resp = get_common_params(params)
-	stmt = params.db.prepare('''delete from acks where uuid = ?''')
+	stmt = db.prepare('''delete from acks where uuid = ?''')
 	stmt.run(params.data.ack_uuid, (err) ->
 		if(err)
-			console.log(err)
+			w.error(err)
 	)
 
 module.exports.receive_file = (params) ->
 	resp = get_common_params(params)
-	stmt = params.db.prepare('''insert into files
+	stmt = db.prepare('''insert into files
 		(uuid, filename, chunks, lock, transferred, sender, receiver)
 		values (?, ?, ?, 0, 0, ?, ?)''')
 	stmt.run(params.data.file_uuid, params.data.filename, params.data.chunks,
@@ -344,13 +357,13 @@ module.exports.receive_file = (params) ->
 module.exports.save_chunk = (params) ->
 	resp = get_common_params(params)
 	save_finished = () ->
-		stmt = params.db.prepare('update files set transferred=1 where uuid = ?')
+		stmt = db.prepare('update files set transferred=1 where uuid = ?')
 		stmt.run(params.data.file_uuid, (err) ->
 			if err
-				console.log(err)
+				cw.error(err)
 		)
 
-	stmt = params.db.prepare('''insert into chunks
+	stmt = db.prepare('''insert into chunks
 		(file, chunk_order, content) values (?, ?, ?)''')
 	stmt.run(params.data.file_uuid, params.data.order, params.data.content,
 		(err) ->
@@ -360,13 +373,13 @@ module.exports.save_chunk = (params) ->
 			else
 				resp.resp = {'response': 'OK', 'file_uuid': params.data.file_uuid}
 				send_response(resp)
-				params.db.get('''select case when count(B.file) = A.chunks
+				db.get('''select case when count(B.file) = A.chunks
 					then 0 else 1 end as finished
 					from files A inner join chunks B on A.uuid=B.file
 					where A.uuid = ?''', params.data.file_uuid,
 					(err, row) ->
 						if (err)
-							console.log(err)
+							w.error(err)
 						else if row and row.finished == 0
 							save_finished()
 				)
@@ -374,8 +387,8 @@ module.exports.save_chunk = (params) ->
 
 module.exports.send_chunk = (params) ->
 	resp = get_common_params(params)
-	stmt = params.db.prepare('delete from chunks where file = ? and chunk_order = ?')
-	params.db.get('''select B.content, B.chunk_order from files A
+	stmt = db.prepare('delete from chunks where file = ? and chunk_order = ?')
+	db.get('''select B.content, B.chunk_order from files A
 		inner join chunks B on A.uuid=B.file where A.uuid = ? and A.lock = 1
 		order by chunk_order limit 1''',
 		params.data.file_uuid, (err, row) ->
@@ -391,7 +404,7 @@ module.exports.send_chunk = (params) ->
 				send_response(resp)
 				stmt.run(params.data.file_uuid, row.chunk_order, (err) ->
 					if err
-						console.log(err)
+						w.error(err)
 				)
 			else
 				resp.err = 'The file doesn\'t exist.'
@@ -400,7 +413,7 @@ module.exports.send_chunk = (params) ->
 
 module.exports.unblock_user = (params) ->
 	resp = get_common_params(params)
-	stmt = params.db.prepare('''delete from blacklist
+	stmt = db.prepare('''delete from blacklist
 		where blocker = ? and blocked = ?''')
 	stmt.run(params.data.blocker, params.data.blocked, (err) ->
 		if err

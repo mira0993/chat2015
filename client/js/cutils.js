@@ -2,6 +2,12 @@
  * Created by ines on 4/25/15.
  */
 
+var wlog = require('winston')
+
+var logger_options = {'colorize': true, 'prettyPrint': true, level: 'debug'}
+wlog.remove(wlog.transports.Console);
+wlog.add(wlog.transports.Console, logger_options)
+
 function toggle_panel(panel_header, panel_id){
 
     $("#"+panel_header).toggle(function() {
@@ -257,7 +263,7 @@ function go_to_chat(lid){
     var id = lid.substr(4);
     var flag = true;
     $("#tabs li").each(function(){
-        console.log($(this).attr("id"));
+        wlog.info($(this).attr("id"));
         if($(this).attr("id")== "tab"+id) {
             select_tab("tab" + id);
             flag = false;

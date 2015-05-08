@@ -110,21 +110,21 @@
        toggle_panel("weather-heading", "weather_panel");
        toggle_panel("clients-heading", "clients_panel");
        $(function() {
-           $( "#dialog-user" ).dialog({
-               resizable: false,
-               modal: true,
-               buttons: {
-                   "Accept": function() {
-                       $("body").attr("name", $("#username").val());
-                       Connect();
-                       $( this ).dialog( "close" );
-                   },
-                   "Cancel": function() {
-                       $( this ).dialog( "close" );
-                       process.exit(1);
+            $( "#dialog-user" ).dialog({
+              resizable: false,
+              modal: true,
+              buttons: {
+                 "Accept": function() {
+                     $("body").attr("name", $("#username").val());
+                     Connect();
+                     $( this ).dialog( "close" );
+                 },
+                 "Cancel": function() {
+                     $( this ).dialog( "close" );
+                     process.exit(1);
 
-                   }
-               }
+                 }
+              }
            });
        });
    </script>
