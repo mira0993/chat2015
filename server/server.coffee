@@ -1,35 +1,47 @@
 dgram = require('dgram')
 cp = require('child_process')
+sqlite3 = require('sqlite3')
+global.w = require('winston')
 hdl = require('./handles')
+
 PORT = 8000
 HOST = '127.0.0.1'
-srv = dgram.createSocket('udp4')
+global.srv = dgram.createSocket('udp4')
+global.db = new sqlite3.Database(':memory:')
+#db = new sqlite3.Database('test.db')
 
+logger_options =
+	colorize: true
+	prettyPrint: true
+	level: 'debug'
+
+w.remove(w.transports.Console);
+w.add(w.transports.Console, logger_options)
 
 create_db = () ->
-	hdl.db.run('''create table if not exists users(
+	db.run('''create table if not exists users(
 		id integer primary key autoincrement,
 		username text unique)''')
-	hdl.db.run('''create table if not exists sessions(
+	db.run('''create table if not exists sessions(
 		id integer primary key,
 		ip_address text,
 		port integer,
 		foreign key (id) references users (id))''')
-	hdl.db.run('''create table if not exists public_messages(
+	db.run('''create table if not exists public_messages(
 		id integer primary key autoincrement,
 		sender integer,
 		dtime text,
 		message text,
 		foreign key (sender) references users (id))''')
-	hdl.db.run('''create table if not exists push_public(
+	db.run('''create table if not exists push_public(
 		id integer,
 		user integer,
 		primary key (id, user),
 		foreign key (id) references public_messages (id),
 		foreign key (user) references users (id))''')
-	hdl.db.run('''create table if not exists acks(
+	db.run('''create table if not exists acks(
 		uuid text unique)''')
-	hdl.db.run('''create table if not exists files(
+	db.run('''create table if not exists files(
 		uuid text,
 		filename text,
 		chunks integer,
@@ -39,12 +51,12 @@ create_db = () ->
 		receiver integer,
 		foreign key (sender) references users (id),
 		foreign key (receiver) references users (id))''')
-	hdl.db.run('''create table if not exists chunks(
+	db.run('''create table if not exists chunks(
 		file text,
 		chunk_order integer,
 		content text,
 		foreign key (file) references files (uuid))''')
-	hdl.db.run('''create table if not exists blacklist(
+	db.run('''create table if not exists blacklist(
 		blocker integer,
 		blocked integer,
 		foreign key (blocker) references users (id),
@@ -53,7 +65,6 @@ create_db = () ->
 
 handle_incoming = (msg, clt) ->
 	params = 
-		"srv": srv
 		"clt": clt
 		"data": JSON.parse(msg.toString('utf-8'))
 	switch params.data.type

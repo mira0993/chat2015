@@ -1,26 +1,4 @@
-sqlite3 = require('sqlite3')
-w = require('winston')
-
-db = new sqlite3.Database(':memory:')
-module.exports.db = db
-#db = new sqlite3.Database('test.db')
-
 MAX_TRIES = 5
-logger_options =
-	colorize: true
-	prettyPrint: true
-	level: 'debug'
-
-w.remove(w.transports.Console);
-w.add(w.transports.Console, logger_options)
-
-get_common_params = (params) ->
-	resp =
-		"srv": params.srv
-		"clt": params.clt
-		"request_uuid": params.data.request_uuid
-		"type": params.data.type
-	return resp
 
 get_actual_dt_string = () ->
 	return (new Date).toISOString()
@@ -28,16 +6,16 @@ get_actual_dt_string = () ->
 send_response = (params) ->
 	store_in_db = () ->
 		stmt = db.prepare('insert into acks values(?)')
-		stmt.run(params.request_uuid, (err) ->
+		stmt.run(params.data.request_uuid, (err) ->
 			if err
 				setTimeout(store_in_db, 500)
 			else
-				params.resp.response_uuid = params.request_uuid
-				params.resp.type = params.type
+				params.resp.response_uuid = params.data.request_uuid
+				params.resp.type = params.data.type
 				resp = JSON.stringify(params.resp)
 				cycle_send = (err) ->
 					if err
-						params.srv.send(resp, 0, resp.length, params.clt.port,
+						srv.send(resp, 0, resp.length, params.clt.port,
 							params.clt.address, cycle_send)
 					else
 						watchdog(params)
@@ -60,7 +38,7 @@ watchdog = (params) ->
 					w.error('ERROR: That acknowledgement doesn\'t exist')
 				else if row
 					resp = JSON.stringify(params.resp)
-					params.srv.send(resp, 0, resp.length, params.clt.port,
+					srv.send(resp, 0, resp.length, params.clt.port,
 						params.clt.address)
 					times++
 					if times <= MAX_TRIES
@@ -69,30 +47,28 @@ watchdog = (params) ->
 	setTimeout(cycle, timeout)
 
 module.exports.block_user = (params) ->
-	resp = get_common_params(params)
 	stmt = db.prepare('''insert into blacklist values (?, ?)''')
 	stmt.run(params.data.blocker, params.data.blocked, (err) ->
 		if err
-			resp.err = err
-			send_error(resp)
+			params.err = err
+			send_error(params)
 		else
-			resp.resp = {'response': 'OK'}
-			send_response(resp)
+			params.resp = {'response': 'OK'}
+			send_response(params)
 	)
 
 module.exports.connect_user = (params) ->
-	resp = get_common_params(params)
 	create_session = (id) ->
 		stmt = db.prepare('''insert into sessions
 			(id, ip_address, port) values (?, ?, ?)''')
 		stmt.run(id, params.clt.address, params.clt.port,
 			(err) ->
 				if err
-					resp.err = err
-					send_error(resp)
+					params.err = err
+					send_error(params)
 				else
-					resp.resp = {'response': 'OK', 'username_id': id}
-					send_response(resp)
+					params.resp = {'response': 'OK', 'username_id': id}
+					send_response(params)
 		)
 
 	create_inbox = (id) ->
@@ -104,19 +80,19 @@ module.exports.connect_user = (params) ->
 			foreign key (sender) references users(id))""",
 			(err) ->
 				if err
-					resp.err = err
-					send_error(resp)
+					params.err = err
+					send_error(params)
 				else
 					db.get('select id from sessions where id = ?', id,
 						(err, row) ->
 							if row
-								resp.resp = 
+								params.resp = 
 									'response': 'Already Connected'
 									'username_id': id
-								send_response(resp)
+								send_response(params)
 							else if err
-								resp.err = err
-								send_error(resp)
+								params.err = err
+								send_error(params)
 							else
 								create_session(id)
 					)
@@ -129,23 +105,22 @@ module.exports.connect_user = (params) ->
 				# Si existe pasamos su id actual
 				create_inbox(row['id'])
 			else if err
-				resp.err = err
-				send_error(resp)
+				params.err = err
+				send_error(params)
 			else
 				# Si no existe lo creamos
 				stmt = db.prepare('insert into users (username) values (?)')
 				stmt.run(params.data.username, (err) ->
 					if err
-						resp.err = err
-						send_error(resp)
+						params.err = err
+						send_error(params)
 					else
 						create_inbox(this.lastID)
 				)
 	)
 
 module.exports.dispatcher = (params) ->
-	resp = get_common_params(params)
-	resp.resp = {"response": "OK", "messages": new Array()}
+	params.resp = {"response": "OK", "messages": new Array()}
 
 	dispatcher_file = () ->
 		stmt = db.prepare('update files set lock=1 where uuid = ?')
@@ -156,7 +131,7 @@ module.exports.dispatcher = (params) ->
 				if err
 					w.error(err)
 				else
-					resp.resp.messages.push(
+					params.resp.messages.push(
 						"type": "file"
 						"file_uuid": row.uuid
 						"username_id": row.username_id
@@ -170,7 +145,7 @@ module.exports.dispatcher = (params) ->
 			(err, num_rows) ->
 				if err
 					w.error(err)
-				send_response(resp)
+				send_response(params)
 			)
 
 	dispatcher_private = () ->
@@ -183,7 +158,7 @@ module.exports.dispatcher = (params) ->
 				if err
 					w.error(err)
 				else
-					resp.resp.messages.push(
+					params.resp.messages.push(
 						"type": "private"
 						"username_id": row.username_id
 						"text": row.message)
@@ -209,7 +184,7 @@ module.exports.dispatcher = (params) ->
 			if err
 				w.error(err)
 			else
-				resp.resp.messages.push(
+				params.resp.messages.push(
 					"type": "public"
 					"username_id": row.username_id
 					"text": row.message)
@@ -226,32 +201,30 @@ module.exports.dispatcher = (params) ->
 	)
 
 module.exports.disconnect_user = (params) ->
-	resp = get_common_params(params)
 	stmt = db.prepare('delete from sessions where id = ?')
 	stmt.run(params.data.username_id, (err) ->
 		if err
-			resp.err = err
-			send_error(resp)
+			params.err = err
+			send_error(params)
 		else if this.changes == 1
-			resp.resp = {'response': 'OK'}
-			send_response(resp)
+			params.resp = {'response': 'OK'}
+			send_response(params)
 		else
-			resp.resp = {'response': 'You weren\'t connected'}
-			send_response(resp)
+			params.resp = {'response': 'You weren\'t connected'}
+			send_response(params)
 	)
 
 module.exports.list_users = (params) ->
-	resp = get_common_params(params)
 	common_qry = """select A.id, A.username,
 		case when B.id is null then -1 else 0 end as status,
 		case when C.blocker is null then 0 else -1 end as blocked
 		from users A left outer join sessions B on A.id=B.id
 		left outer join blacklist C on A.id=C.blocked and C.blocker = ?"""
 	clbk = (err, rows) ->
-		resp.resp = if err \
+		params.resp = if err \
 			then {'response': "#{err}"} \
 			else {'response': 'OK', 'type':'List', 'obj': rows}
-		send_response(resp)
+		send_response(params)
 	if params.data.filter == ''
 		parameters = [common_qry, [params.data.username_id], clbk]
 	else
@@ -260,10 +233,9 @@ module.exports.list_users = (params) ->
 	db.all.apply(db, parameters)
 
 module.exports.private_message = (params) ->
-	resp = get_common_params(params)
 	success_resp = () ->
-		resp.resp = {"response": "OK"}
-		send_response(resp)
+		params.resp = {"response": "OK"}
+		send_response(params)
 
 	save_private = () ->
 		stmt = db.prepare("""insert into
@@ -272,8 +244,8 @@ module.exports.private_message = (params) ->
 		stmt.run(params.data.username_id, get_actual_dt_string(), params.data.message,
 			(err) ->
 				if err
-					resp.err = err
-					send_error(resp)
+					params.err = err
+					send_error(params)
 		)
 
 	db.get('select blocked from blacklist where blocker = ? and blocked = ?',
@@ -289,7 +261,6 @@ module.exports.private_message = (params) ->
 	
 
 module.exports.public_message = (params) ->
-	resp = get_common_params(params)
 	store_public = (id) ->
 		stmt = db.prepare("""insert into push_public
 			values(#{id}, ?)""")
@@ -321,16 +292,15 @@ module.exports.public_message = (params) ->
 	stmt.run(params.data.username_id, get_actual_dt_string(), params.data.message,
 		(err) ->
 			if err
-				resp.err = err
-				send_error(resp)
+				params.err = err
+				send_error(params)
 			else
-				resp.resp = {'response': 'OK'}
-				send_response(resp)
+				params.resp = {'response': 'OK'}
+				send_response(params)
 				store_public(this.lastID)
 	)
 
 module.exports.receive_ack = (params) ->
-	resp = get_common_params(params)
 	stmt = db.prepare('''delete from acks where uuid = ?''')
 	stmt.run(params.data.ack_uuid, (err) ->
 		if(err)
@@ -338,7 +308,6 @@ module.exports.receive_ack = (params) ->
 	)
 
 module.exports.receive_file = (params) ->
-	resp = get_common_params(params)
 	stmt = db.prepare('''insert into files
 		(uuid, filename, chunks, lock, transferred, sender, receiver)
 		values (?, ?, ?, 0, 0, ?, ?)''')
@@ -346,16 +315,15 @@ module.exports.receive_file = (params) ->
 		params.data.sender, params.data.receiver,
 		((err) ->
 			if err
-				resp.err = err
-				send_error(resp)
+				params.err = err
+				send_error(params)
 			else
-				resp.resp = {'response': 'OK', 'file_uuid': params.data.file_uuid}
-				send_response(resp)
+				params.resp = {'response': 'OK', 'file_uuid': params.data.file_uuid}
+				send_response(params)
 		)
 	)
 
 module.exports.save_chunk = (params) ->
-	resp = get_common_params(params)
 	save_finished = () ->
 		stmt = db.prepare('update files set transferred=1 where uuid = ?')
 		stmt.run(params.data.file_uuid, (err) ->
@@ -368,11 +336,11 @@ module.exports.save_chunk = (params) ->
 	stmt.run(params.data.file_uuid, params.data.order, params.data.content,
 		(err) ->
 			if err
-				resp.err = err
-				send_error(resp)
+				params.err = err
+				send_error(params)
 			else
-				resp.resp = {'response': 'OK', 'file_uuid': params.data.file_uuid}
-				send_response(resp)
+				params.resp = {'response': 'OK', 'file_uuid': params.data.file_uuid}
+				send_response(params)
 				db.get('''select case when count(B.file) = A.chunks
 					then 0 else 1 end as finished
 					from files A inner join chunks B on A.uuid=B.file
@@ -386,40 +354,38 @@ module.exports.save_chunk = (params) ->
 	)
 
 module.exports.send_chunk = (params) ->
-	resp = get_common_params(params)
 	stmt = db.prepare('delete from chunks where file = ? and chunk_order = ?')
 	db.get('''select B.content, B.chunk_order from files A
 		inner join chunks B on A.uuid=B.file where A.uuid = ? and A.lock = 1
 		order by chunk_order limit 1''',
 		params.data.file_uuid, (err, row) ->
 			if err
-				resp.err = err
-				send_error(resp)
+				params.err = err
+				send_error(params)
 			else if (row)
-				resp.resp = 
+				params.resp = 
 					'response': 'OK'
 					'content': row.content
 					'order': row.chunk_order
 					'file_uuid': params.data.file_uuid
-				send_response(resp)
+				send_response(params)
 				stmt.run(params.data.file_uuid, row.chunk_order, (err) ->
 					if err
 						w.error(err)
 				)
 			else
-				resp.err = 'The file doesn\'t exist.'
-				send_error(resp)
+				params.err = 'The file doesn\'t exist.'
+				send_error(params)
 	)
 
 module.exports.unblock_user = (params) ->
-	resp = get_common_params(params)
 	stmt = db.prepare('''delete from blacklist
 		where blocker = ? and blocked = ?''')
 	stmt.run(params.data.blocker, params.data.blocked, (err) ->
 		if err
-			resp.err = err
-			send_error(resp)
+			params.err = err
+			send_error(params)
 		else
-			resp.resp = {'response': 'OK'}
-			send_response(resp)
+			params.resp = {'response': 'OK'}
+			send_response(params)
 	)
