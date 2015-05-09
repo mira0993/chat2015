@@ -1,4 +1,5 @@
 dgram = require('dgram')
+cluster = require('cluster')
 cp = require('child_process')
 sqlite3 = require('sqlite3')
 global.w = require('winston')
@@ -81,16 +82,25 @@ handle_incoming = (msg, clt) ->
 		when 'Block' then hdl.block_user(params)
 		when 'Unblock' then hdl.unblock_user(params)
 
-srv.on('listening', () ->
-	addr = srv.address()
-	console.log("Listening on #{addr.address}:#{addr.port}"))
+if cluster.isMaster
+	process.on('message', (msg) ->
+		# Aqui podemos leer los mensajes que nos envie el cliente
+		# process.send('Hi parent') # Aqui podemos mandarle mensajes al cliente
+	)
 
-srv.on('message', handle_incoming)
+	srv.on('listening', () ->
+		addr = srv.address()
+		console.log("Listening on #{addr.address}:#{addr.port}"))
 
-create_db()
-srv.bind(PORT, HOST)
+	srv.on('message', handle_incoming)
 
-process.on('message', (msg) ->
-	# Aqui podemos leer los mensajes que nos envie el cliente
-	# process.send('Hi parent') # Aqui podemos mandarle mensajes al cliente
-)
+	create_db()
+	srv.bind(PORT, HOST)
+
+	# Aqui se crea el primer hijo 
+	global.replicator = cluster.fork()
+else
+	repl = require('./replicator')
+	process.on('message', (msg) ->
+		repl.handle(msg);
+	)

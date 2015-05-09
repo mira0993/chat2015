@@ -21,6 +21,7 @@ send_response = (params) ->
 						watchdog(params)
 				cycle_send(true)
 		)
+	replicator.send(params)
 	store_in_db()
 
 send_error = (params) ->
