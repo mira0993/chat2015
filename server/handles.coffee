@@ -13,6 +13,8 @@ send_response = (params) ->
 				params.resp.response_uuid = params.data.request_uuid
 				params.resp.type = params.data.type
 				resp = JSON.stringify(params.resp)
+				if params.data.type == 'File'
+					w.debug(resp)
 				cycle_send = (err) ->
 					if err
 						srv.send(resp, 0, resp.length, params.clt.port,
@@ -127,7 +129,7 @@ module.exports.dispatcher = (params) ->
 		stmt = db.prepare('update files set lock=1 where uuid = ?')
 		db.each('''select A.uuid, A.filename, A.chunks, B.id username_id from files A
 			inner join users B on A.sender=B.id
-			where A.receiver = ? and A.lock = 0''', params.data.username_id,
+			where A.receiver = ? and A.lock = 0 and transferred = 1''', params.data.username_id,
 			((err, row) ->
 				if err
 					w.error(err)
@@ -319,6 +321,7 @@ module.exports.receive_file = (params) ->
 				params.err = err
 				send_error(params)
 			else
+				w.debug('Receiving file %s', params.data.filename)
 				params.resp = {'response': 'OK', 'file_uuid': params.data.file_uuid}
 				send_response(params)
 		)
@@ -340,7 +343,10 @@ module.exports.save_chunk = (params) ->
 				params.err = err
 				send_error(params)
 			else
-				params.resp = {'response': 'OK', 'file_uuid': params.data.file_uuid}
+				w.debug('Receiving %s', params.data.order);
+				params.resp =
+					'response': 'OK',
+					'file_uuid': params.data.file_uuid
 				send_response(params)
 				db.get('''select case when count(B.file) = A.chunks
 					then 0 else 1 end as finished
@@ -370,6 +376,7 @@ module.exports.send_chunk = (params) ->
 					'order': row.chunk_order
 					'file_uuid': params.data.file_uuid
 				send_response(params)
+				w.debug('Server: sending response')
 				stmt.run(params.data.file_uuid, row.chunk_order, (err) ->
 					if err
 						w.error(err)

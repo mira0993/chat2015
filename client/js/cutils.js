@@ -4,7 +4,7 @@
 
 var wlog = require('winston')
 
-var logger_options = {'colorize': true, 'prettyPrint': true, level: 'debug'}
+var logger_options = {'colorize': true, 'prettyPrint': true, level: 'info'}
 wlog.remove(wlog.transports.Console);
 wlog.add(wlog.transports.Console, logger_options)
 
@@ -75,6 +75,7 @@ function add_message(id, user, text, time, me){
 
 
 function add_message_file(id, user, filename, file_id, time, me){
+    wlog.info('Adding file')
     var align = "left";
     var bkg_color = "DE4646";
     var span_file = '';

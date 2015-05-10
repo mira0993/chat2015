@@ -5,5 +5,5 @@ module.exports.handle = function (msg) {
 	 	log de replicacion para saber que cosas ya fueron replicadas
 	 	y que no
 	*/
-	w.debug('I will handle this: %s', msg);
+	//w.debug('I will handle this: %s', msg);
 }
