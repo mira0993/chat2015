@@ -5,7 +5,7 @@
   "main": "index.html",
   "single-instance":false,
   "window": {
-    "title": "La sexy y el papi chat",
+    "title": "Chat2015",
     "widht": 400,
     "height": 600,
     "max_height": 600,

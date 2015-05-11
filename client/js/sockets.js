@@ -2,9 +2,6 @@
  * Created by ines on 4/26/15.
  */
 
-var PORT=8000;
-var SERVER="127.0.0.1";
-
 var MAX_TRIES = 3;
 var MAX_LOST = 50;
 var CNT_LOST = 0;
@@ -26,19 +23,8 @@ var win = gui.Window.get();
 var cp = require('child_process');
 var fs = require('fs');
 var path_module = require('path');
-var child_server;
-
-if (gui.App.argv.indexOf('-s') >= 0)
-    child_server = cp.fork('', {execPath: 'coffee', execArgv: ['../server/server.coffee']})
         
 //------------------------------------------------NODE FUNCTIONS ------------------------------------------------------//
-
-if (child_server) {
-    // child.send('Hi Child!'); // Siempre que quieras enviarle algo al servidor
-    child_server.on('message', function (msg) {
-      // Cuando quieras leer un mensaje que te haya enviado el servidor
-    });
-}
 
 win.on('close', function() {
     __disconnect__();

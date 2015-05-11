@@ -6,7 +6,9 @@ global.w = require('winston')
 hdl = require('./handles')
 
 PORT = 8000
-HOST = '127.0.0.1'
+HOST = '0.0.0.0'
+MULTICAST = '224.1.1.1'
+global.iAmMaster = true
 global.srv = dgram.createSocket('udp4')
 global.db = new sqlite3.Database(':memory:')
 #db = new sqlite3.Database('test.db')
@@ -68,19 +70,25 @@ handle_incoming = (msg, clt) ->
 	params = 
 		"clt": clt
 		"data": JSON.parse(msg.toString('utf-8'))
-	switch params.data.type
-		when 'ACK' then hdl.receive_ack(params)
-		when 'Push' then hdl.dispatcher(params)
-		when 'Public_Message' then hdl.public_message(params)
-		when 'Private_Message' then hdl.private_message(params)
-		when 'List' then hdl.list_users(params)
-		when 'S_Chunk' then hdl.save_chunk(params)
-		when "R_Chunk" then hdl.send_chunk(params)
-		when 'File' then hdl.receive_file(params)
-		when 'Connect' then hdl.connect_user(params)
-		when 'Disconnect' then hdl.disconnect_user(params)
-		when 'Block' then hdl.block_user(params)
-		when 'Unblock' then hdl.unblock_user(params)
+	if params.data.type
+		switch params.data.type
+			when 'ACK' then hdl.receive_ack(params)
+			when 'Push' then hdl.dispatcher(params)
+			when 'Public_Message' then hdl.public_message(params)
+			when 'Private_Message' then hdl.private_message(params)
+			when 'List' then hdl.list_users(params)
+			when 'S_Chunk' then hdl.save_chunk(params)
+			when "R_Chunk" then hdl.send_chunk(params)
+			when 'File' then hdl.receive_file(params)
+			when 'Connect' then hdl.connect_user(params)
+			when 'Disconnect' then hdl.disconnect_user(params)
+			when 'Block' then hdl.block_user(params)
+			when 'Unblock' then hdl.unblock_user(params)
+	else
+		# Cuando es multicast
+		if params.data.who_is_the_master and iAmMaster
+			resp = JSON.stringify({'i_am': true})
+			srv.send(resp, 0, resp.length, clt.port, clt.address)
 
 if cluster.isMaster
 	process.on('message', (msg) ->
@@ -95,7 +103,9 @@ if cluster.isMaster
 	srv.on('message', handle_incoming)
 
 	create_db()
-	srv.bind(PORT, HOST)
+	srv.bind(PORT, HOST, () ->
+		srv.addMembership(MULTICAST)
+	)
 
 	# Aqui se crea el primer hijo 
 	global.replicator = cluster.fork()
