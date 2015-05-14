@@ -106,18 +106,26 @@
    <script src="js/sockets.js"></script>
    <script src="js/client.js"></script>
    <script>
-       toggle_panel("clock-heading","clock_panel");
-       toggle_panel("weather-heading", "weather_panel");
-       toggle_panel("clients-heading", "clients_panel");
+       var received_master = false;
+       var handle_wait_for_master = function () {
+        if (!received_master)
+          setTimeout(handle_wait_for_master, 100);
+        else {
+          Connect();
+          $( this ).dialog( "close" );
+        }
+       }
        $(function() {
+            toggle_panel("clock-heading","clock_panel");
+            toggle_panel("weather-heading", "weather_panel");
+            toggle_panel("clients-heading", "clients_panel");
             $( "#dialog-user" ).dialog({
               resizable: false,
               modal: true,
               buttons: {
                  "Accept": function() {
                      $("body").attr("name", $("#username").val());
-                     Connect();
-                     $( this ).dialog( "close" );
+                     handle_wait_for_master();
                  },
                  "Cancel": function() {
                      $( this ).dialog( "close" );

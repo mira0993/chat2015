@@ -44,8 +44,10 @@ var handle_messages = function (message, remote) {
             receive(data);
         }
     } else {
-        if (data.i_am)
+        if (data.i_am) {
             SERVER = remote.address;
+            received_master = true;
+        }
     }
 };
 
