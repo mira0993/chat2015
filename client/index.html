@@ -106,13 +106,13 @@
    <script src="js/sockets.js"></script>
    <script src="js/client.js"></script>
    <script>
-       var received_master = false;
-       var handle_wait_for_master = function () {
+       var received_master = true;
+       var handle_wait_for_master = function (selector) {
         if (!received_master)
           setTimeout(handle_wait_for_master, 100);
         else {
           Connect();
-          $( this ).dialog( "close" );
+          $(selector).dialog( "close" );
         }
        }
        $(function() {
@@ -125,7 +125,7 @@
               buttons: {
                  "Accept": function() {
                      $("body").attr("name", $("#username").val());
-                     handle_wait_for_master();
+                     handle_wait_for_master(this);
                  },
                  "Cancel": function() {
                      $( this ).dialog( "close" );

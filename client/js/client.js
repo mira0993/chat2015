@@ -54,9 +54,13 @@ var handle_messages = function (message, remote) {
 
 me.on('listening', function() {
     addr = me.address();
+    //me.addMembership(MULTICAST);
     var message = new Buffer(JSON.stringify({'who_is_the_master': true}));
     setTimeout(function() {
-        me.send(message, 0, message.length, PORT, MULTICAST);
+        me.send(message, 0, message.length, PORT, MULTICAST, function (err) {
+            if (err)
+                wlog.error(err);
+        });
         wlog.info("Listening on " + addr.address + ":" + addr.port);
     }, 500);
 });
@@ -64,7 +68,7 @@ me.on('listening', function() {
 me.on('message', handle_messages);
 
 create_db();
-me.bind(addr.port, addr.address);
+me.bind();
 
 
 
