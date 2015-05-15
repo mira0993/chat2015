@@ -1,8 +1,10 @@
 var dgram = require('dgram');
 var sqlite3 = require("sqlite3");
 var PORT=8000;
-var SERVER="127.0.0.1";
-var MULTICAST = '224.1.1.1';
+var HOST=['172', '28', '128', '3'];
+var SERVER=HOST.join('.');
+var MULTICAST_HOST = [HOST[0], HOST[1], HOST[2], '255'].join('.')
+var MULTICAST_PORT = 5555;
 
 var db = new sqlite3.Database(':memory:')
 var child_server;
@@ -45,6 +47,7 @@ var handle_messages = function (message, remote) {
         }
     } else {
         if (data.i_am) {
+            wlog.info('Here I am')
             SERVER = remote.address;
             received_master = true;
         }
@@ -54,10 +57,11 @@ var handle_messages = function (message, remote) {
 
 me.on('listening', function() {
     addr = me.address();
-    //me.addMembership(MULTICAST);
+    me.setBroadcast(true);
+    //me.addMembership(MULTICAST_HOST);
     var message = new Buffer(JSON.stringify({'who_is_the_master': true}));
     setTimeout(function() {
-        me.send(message, 0, message.length, PORT, MULTICAST, function (err) {
+        me.send(message, 0, message.length, PORT, MULTICAST_HOST, function (err) {
             if (err)
                 wlog.error(err);
         });

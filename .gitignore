@@ -1,5 +1,6 @@
 .venv
 .idea
+Vagrant
 client/node_modules/
 client/css/flaticon.css
 client/css/images/

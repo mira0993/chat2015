@@ -7,7 +7,6 @@ hdl = require('./handles')
 
 PORT = 8000
 HOST = '0.0.0.0'
-MULTICAST = '224.1.1.1'
 global.iAmMaster = true
 global.srv = dgram.createSocket('udp4')
 global.db = new sqlite3.Database(':memory:')
@@ -103,9 +102,7 @@ if cluster.isMaster
 	srv.on('message', handle_incoming)
 
 	create_db()
-	srv.bind(PORT, HOST, () ->
-		srv.addMembership(MULTICAST)
-	)
+	srv.bind(PORT, HOST)
 
 	# Aqui se crea el primer hijo 
 	global.replicator = cluster.fork()
