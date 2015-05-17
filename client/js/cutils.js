@@ -247,6 +247,8 @@ function handle_incomming_video (msg) {
 }
 
 function add_chat(lid, options){
+    if (!options)
+        options = new Object();
     id = lid.substr(4);
     user=$("#"+lid+" h5").text();
     new_tab ='<li role="presentation" id="tab'+id+'">'+
