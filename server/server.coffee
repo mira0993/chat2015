@@ -8,10 +8,7 @@ external = require('./external')
 
 PORT = 8000
 HOST = '0.0.0.0'
-<<<<<<< HEAD
 global.MULTICAST_HOST = '255.255.255.255'
-global.iAmMaster = true
-=======
 SRV_ID = '-1'
 
 # Master Selection Variables
@@ -25,8 +22,6 @@ global.timmers = []
 global.current_time = Date.now()
 global.time_adjustment = 0
 global.send_time_obj = null
-
->>>>>>> 1cbe3920a48951deef58d3709bc4a05cc56e94ce
 global.srv = dgram.createSocket('udp4')
 global.EXTERNAL_PORT = 3333
 global.srv_external = dgram.createSocket('udp4')
@@ -272,36 +267,29 @@ handle_incoming = (msg, clt) ->
         clearTimeout(global.send_time_obj)
         global.send_master_time()
 
-
-
-
-
->>>>>>> 1cbe3920a48951deef58d3709bc4a05cc56e94ce
-
 if cluster.isMaster
-  # Client communication
-  process.on('message', (m) ->
-    if(m.our_id)
-      SRV_ID = m.our_id
-      w.info("server_id: "+ SRV_ID)
-      if global.iAmMaster == false
-        resp = JSON.stringify({'clock_request': "true"})
-        srv.send(resp, 0, resp.length, PORT, global.master_ip)
+	# Client communication
+	process.on('message', (m) ->
+	if(m.our_id)
+	  SRV_ID = m.our_id
+	  w.info("server_id: "+ SRV_ID)
+	  if global.iAmMaster == false
+	    resp = JSON.stringify({'clock_request': "true"})
+	    srv.send(resp, 0, resp.length, PORT, global.master_ip)
 
-  )
+	)
 
-  srv.on('listening', () ->
-    addr = srv.address()
-    console.log("Listening on #{addr.address}:#{addr.port}")
-    who_is_master())
+	srv.on('listening', () ->
+		addr = srv.address()
+		console.log("Listening on #{addr.address}:#{addr.port}")
+		who_is_master())
 
-<<<<<<< HEAD
-	srv_external.on('message', (msg, clt) ->
-		#w.debug(msg)
-		data = JSON.parse(msg.toString('utf-8'))
-		w.debug(data)
-		if not data.is_mine
-			external.handle_new_messages(data)
+		srv_external.on('message', (msg, clt) ->
+			#w.debug(msg)
+			data = JSON.parse(msg.toString('utf-8'))
+			w.debug(data)
+			if not data.is_mine
+				external.handle_new_messages(data)
 	)
 
 	srv_external.on('listening', () ->
@@ -333,20 +321,12 @@ if cluster.isMaster
 		, 1000)
 		###
 		console.log("Listening on #{addr.address}:#{addr.port}"))
-=======
->>>>>>> 1cbe3920a48951deef58d3709bc4a05cc56e94ce
 
-  srv.on('message', handle_incoming)
-
-<<<<<<< HEAD
+  	srv.on('message', handle_incoming)
 	create_db()
 	srv.bind(PORT, HOST)
 	if DEBUG_EXTERNAL
 		srv_external.bind(EXTERNAL_PORT, HOST)
-=======
-  create_db()
-  srv.bind(PORT, HOST)
->>>>>>> 1cbe3920a48951deef58d3709bc4a05cc56e94ce
 
   # Aqui se crea el primer hijo
   global.replicator = cluster.fork()
