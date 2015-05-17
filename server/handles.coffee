@@ -211,6 +211,10 @@ module.exports.disconnect_user = (params) ->
 			send_error(params)
 		else if this.changes == 1
 			params.resp = {'response': 'OK'}
+			setTimeout((()->
+				if global.send_time_obj != null
+					clearTimeout(global.send_time_obj)
+					global.send_master_time()), 5000)
 			send_response(params)
 		else
 			params.resp = {'response': 'You weren\'t connected'}

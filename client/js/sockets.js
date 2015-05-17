@@ -3,7 +3,7 @@
  */
 
 var MAX_TRIES = 3;
-var MAX_LOST = 50;
+var MAX_LOST = 1000;
 var CNT_LOST = 0;
 
 var BLOCKED_COLOR = "#153B58";
@@ -15,6 +15,7 @@ var ICON_B_COLOR = "153B60";
 var USERNAME_ID = -1;
 var USERNAME = "";
 var LIST_USERS = {};
+var child_server;
 
 var LIST_USER_LOCK = true;
 var uuid = require('uuid');
@@ -26,12 +27,31 @@ var path_module = require('path');
         
 //------------------------------------------------NODE FUNCTIONS ------------------------------------------------------//
 
+var show_clock = function() {
+    function checkTime(i) {
+        if (i<10) {i = "0" + i};  // add zero in front of numbers < 10
+        return i;
+    }
+    var millis = Date.now();
+    //var millis2 = new Date().getTimezoneOffset()*60*1000;
+    var today=new Date();
+    //today.setTime(millis +300000+millis2);
+    today.setTime(millis + clock_adjustment)
+    var h=today.getHours();
+    var m=today.getMinutes();
+    var s=today.getSeconds();
+    m = checkTime(m);
+    s = checkTime(s);
+    $("#clock_panel").html("<h2>"+h+":"+m+":"+s+"</h2>");
+   // wlog.info(h+":"+m+":"+s);
+    setTimeout(function(){show_clock()},500);
+};
+
+
 win.on('close', function() {
     __disconnect__();
     this.hide();                // Pretend to be closed already
-    wlog.info("Closing...");
-    if (child_server)
-        child_server.kill();
+    wlog.info("Closing...[OK]");
 });
 
 var watchdog = function(uuid){
@@ -45,9 +65,9 @@ var watchdog = function(uuid){
                         send_response(JSON.parse(row["msg"].toString('utf-8')));
                         tries++;
                         if(tries <= MAX_TRIES)
-                            setTimeout(cycle,1500);
+                            setTimeout(cycle,3000);
                         else {
-                            wlog.warn("LIMIT RETRIES!");
+                            //wlog.warn("LIMIT RETRIES!");
                             CNT_LOST++;
                             if(CNT_LOST > MAX_LOST){
                                 wlog.error("LOST SERVER CONNECTION!");
@@ -211,7 +231,9 @@ var recv_un_block = function(json, type){
 var recv_connect = function(json){
     if(json["response"] == "OK") {
         USERNAME_ID = json["username_id"];
-        __list_user__("");
+        show_clock();
+        child_server.send({our_id: USERNAME_ID});
+        __list_user__("")
         setInterval(function(){__list_user__("")}, 3000);
         setInterval(__push__, 1000);
     }else{
@@ -325,7 +347,11 @@ var receive = function(json){
                     recv_push(json);
                     break;
                 case "Disconnect":
-                    win.close(true);
+                    setTimeout(function(){
+                        if (child_server)
+                            child_server.kill();
+                        win.close(true);}
+                        , 4000);
                     break;
                 case "Block":
                     var om = JSON.parse(row["msg"].toString('utf-8'));
