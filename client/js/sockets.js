@@ -335,6 +335,24 @@ var receive = function(json){
                     var om = JSON.parse(row["msg"].toString('utf-8'));
                     recv_un_block(om, "Unblock");
                     break;
+                case "Cam":
+                    child_process_video = cp.fork('',
+                        {execPath: 'node', execArgv: ['js/cam_video.js', json.ip_address]});
+                    interval_cam = setInterval(draw, 200);
+                    break;
+            }
+        } else if (json.type == "Cam") {
+            send_ack(json);
+            if (!is_cam_activated) {
+                is_cam_activated = true;
+                child_process_video = cp.fork('',
+                    {execPath: 'node', execArgv: ['js/cam_video.js', json.ip_address]});
+                var username_id = json["username_id"] - 1;
+                var html_id = (Number(json["username_id"]) + 1);
+                if($("#tab"+html_id).length <=0)
+                    add_chat("user"+html_id, {"cam": true, "my_cam": true});
+                add_message(html_id, LIST_USERS[username_id]["username"],
+                    "Initializing video", "time", false);
             }
         }
     }
@@ -538,3 +556,27 @@ var receive_chunk = function (data) {
         }
     });
 };
+
+var draw = function (ip_address){
+    my_context.drawImage(video, 0, 0, my_canvas.width, my_canvas.height);
+    var trimmed = my_canvas.toDataURL("image/jpeg", 1);
+    var message = {'data_url': trimmed};
+    child_process_video.send(message);
+}
+
+var cam_request = function (user_id) {
+    if (navigator.getUserMedia) {       
+        navigator.getUserMedia({video: true}, function (stream) {
+            video.src = window.URL.createObjectURL(stream);
+            cam_stream = stream;
+            var r_data = {'type': 'Cam', 'request_uuid': uuid.v4(), 'username_id': user_id}
+            insert_db(r_data);
+        }, function (e) {
+            wlog.warn(e);
+        });
+    }
+}
+
+var receive_cam = function (json) {
+    wlog.info(json)
+}

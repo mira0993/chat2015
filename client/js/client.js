@@ -1,16 +1,17 @@
 var dgram = require('dgram');
 var sqlite3 = require("sqlite3");
 var PORT=8000;
-var HOST=['172', '28', '128', '3'];
-var SERVER=HOST.join('.');
-var MULTICAST_HOST = [HOST[0], HOST[1], HOST[2], '255'].join('.')
-var MULTICAST_PORT = 5555;
+var SERVER=null;
+var MULTICAST_HOST = '255.255.255.255'//[HOST[0], HOST[1], HOST[2], '255'].join('.')
 
 var db = new sqlite3.Database(':memory:')
 var child_server;
+var timeout_server = 400;
 
-if (gui.App.argv.indexOf('-s') >= 0)
-    child_server = cp.fork('', {execPath: 'coffee', execArgv: ['../server/server.coffee']})
+if (gui.App.argv.indexOf('-s') >= 0) {
+    child_server = cp.fork('', {execPath: 'coffee', execArgv: ['../server/server.coffee']});
+    timeout_server = 1000;
+}
 
 if (child_server) {
     // child.send('Hi Child!'); // Siempre que quieras enviarle algo al servidor
@@ -47,9 +48,10 @@ var handle_messages = function (message, remote) {
         }
     } else {
         if (data.i_am) {
-            wlog.info('Here I am')
             SERVER = remote.address;
             received_master = true;
+        } else if (data.is_external) {
+            add_message(1, data.username, data.message, "time", false);
         }
     }
 };
@@ -58,15 +60,15 @@ var handle_messages = function (message, remote) {
 me.on('listening', function() {
     addr = me.address();
     me.setBroadcast(true);
-    //me.addMembership(MULTICAST_HOST);
     var message = new Buffer(JSON.stringify({'who_is_the_master': true}));
     setTimeout(function() {
+        wlog.info('Sending broadcast');
         me.send(message, 0, message.length, PORT, MULTICAST_HOST, function (err) {
             if (err)
                 wlog.error(err);
         });
         wlog.info("Listening on " + addr.address + ":" + addr.port);
-    }, 500);
+    }, timeout_server);
 });
 
 me.on('message', handle_messages);

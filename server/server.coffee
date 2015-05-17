@@ -4,13 +4,19 @@ cp = require('child_process')
 sqlite3 = require('sqlite3')
 global.w = require('winston')
 hdl = require('./handles')
+external = require('./external')
 
 PORT = 8000
 HOST = '0.0.0.0'
+global.MULTICAST_HOST = '255.255.255.255'
 global.iAmMaster = true
 global.srv = dgram.createSocket('udp4')
+global.EXTERNAL_PORT = 3333
+global.srv_external = dgram.createSocket('udp4')
 global.db = new sqlite3.Database(':memory:')
 #db = new sqlite3.Database('test.db')
+
+DEBUG_EXTERNAL = true
 
 logger_options =
 	colorize: true
@@ -83,10 +89,12 @@ handle_incoming = (msg, clt) ->
 			when 'Disconnect' then hdl.disconnect_user(params)
 			when 'Block' then hdl.block_user(params)
 			when 'Unblock' then hdl.unblock_user(params)
+			when 'Cam' then hdl.init_cam(params)
 	else
-		# Cuando es multicast
+		# Cuando es broadcast
 		if params.data.who_is_the_master and iAmMaster
-			resp = JSON.stringify({'i_am': true})
+			w.debug('Here i am')
+			resp = new Buffer(JSON.stringify({'i_am': true}))
 			srv.send(resp, 0, resp.length, clt.port, clt.address)
 
 if cluster.isMaster
@@ -95,14 +103,50 @@ if cluster.isMaster
 		# process.send('Hi parent') # Aqui podemos mandarle mensajes al cliente
 	)
 
+	srv_external.on('message', (msg, clt) ->
+		#w.debug(msg)
+		data = JSON.parse(msg.toString('utf-8'))
+		w.debug(data)
+		if not data.is_mine
+			external.handle_new_messages(data)
+	)
+
+	srv_external.on('listening', () ->
+		addr = srv_external.address()
+		srv_external.setBroadcast(true)
+		###
+		setTimeout(() ->
+			srv_external.setBroadcast(true)
+			message = new Buffer(JSON.stringify({'message': 'Hola, como estas?', 'username': 'Cristian'}))
+			srv_external.send(message, 0, message.length, EXTERNAL_PORT, MULTICAST_HOST, (err) ->
+				if err
+					w.error(err)
+			)
+		, 4000)
+		###
+		console.log("Listening on #{addr.address}:#{addr.port}")
+	)
+
 	srv.on('listening', () ->
 		addr = srv.address()
+		###
+		setTimeout(() ->
+			srv.setBroadcast(true);
+			message = new Buffer(JSON.stringify({'who_is_the_master': true}))
+			srv.send(message, 0, message.length, PORT, MULTICAST_HOST, (err) ->
+				if err
+					w.debug(err)
+			)
+		, 1000)
+		###
 		console.log("Listening on #{addr.address}:#{addr.port}"))
 
 	srv.on('message', handle_incoming)
 
 	create_db()
 	srv.bind(PORT, HOST)
+	if DEBUG_EXTERNAL
+		srv_external.bind(EXTERNAL_PORT, HOST)
 
 	# Aqui se crea el primer hijo 
 	global.replicator = cluster.fork()

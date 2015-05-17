@@ -6,12 +6,12 @@
   "single-instance":false,
   "window": {
     "title": "Chat2015",
-    "widht": 400,
+    "widht": 800,
     "height": 600,
     "max_height": 600,
-    "max_width":400,
+    "max_width": 800,
     "min_height": 600,
-    "min_width":400,
+    "min_width": 800,
     "position": "mouse",
     "resizable": false
   },

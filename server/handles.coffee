@@ -1,5 +1,7 @@
 MAX_TRIES = 5
 
+extend = require('extend')
+
 get_actual_dt_string = () ->
 	return (new Date).toISOString()
 
@@ -12,7 +14,7 @@ send_response = (params) ->
 			else
 				params.resp.response_uuid = params.data.request_uuid
 				params.resp.type = params.data.type
-				resp = JSON.stringify(params.resp)
+				resp = new Buffer(JSON.stringify(params.resp))
 				if params.data.type == 'File'
 					w.debug(resp)
 				cycle_send = (err) ->
@@ -23,7 +25,7 @@ send_response = (params) ->
 						watchdog(params)
 				cycle_send(true)
 		)
-	replicator.send(params)
+	replicator.send(params.data)
 	store_in_db()
 
 send_error = (params) ->
@@ -40,7 +42,7 @@ watchdog = (params) ->
 				if err
 					w.error('ERROR: That acknowledgement doesn\'t exist')
 				else if row
-					resp = JSON.stringify(params.resp)
+					resp = new Buffer(JSON.stringify(params.resp))
 					srv.send(resp, 0, resp.length, params.clt.port,
 						params.clt.address)
 					times++
@@ -300,6 +302,19 @@ module.exports.public_message = (params) ->
 			else
 				params.resp = {'response': 'OK'}
 				send_response(params)
+				w.debug('Sending ack public')
+				json = {'message': params.data.message, 'is_mine': true}
+				db.get('select username from users where id = ?',
+					params.data.username_id,
+					(err, row) ->
+						if err
+							w.debug(err)
+						else if row
+							w.debug('Sending broadcast')
+							json.username = row.username
+							message = new Buffer(JSON.stringify(json))
+							srv_external.send(message, 0, message.length, EXTERNAL_PORT, MULTICAST_HOST)
+				)
 				store_public(this.lastID)
 	)
 
@@ -376,7 +391,6 @@ module.exports.send_chunk = (params) ->
 					'order': row.chunk_order
 					'file_uuid': params.data.file_uuid
 				send_response(params)
-				w.debug('Server: sending response')
 				stmt.run(params.data.file_uuid, row.chunk_order, (err) ->
 					if err
 						w.error(err)
@@ -397,3 +411,28 @@ module.exports.unblock_user = (params) ->
 			params.resp = {'response': 'OK'}
 			send_response(params)
 	)
+
+module.exports.init_cam = (params) ->
+	db.get('select ip_address, port from sessions where id = ?',
+		params.data.username_id,
+		(err, row) ->
+			if err
+				params.err = err
+				send_error(params)
+			else if not row
+				params.err = 'That user isn\'t connected'
+				send_error(params)
+			else
+				params.resp = 
+					'response': 'OK'
+					'ip_address': row.ip_address
+					'username_id': params.data.username_id
+				send_response(params)
+				new_params = new Object()
+				extend(true, new_params, params)
+				new_params.resp.ip_address = params.clt.address
+				new_params.clt.address = row.ip_address
+				new_params.clt.port = row.port
+				send_response(new_params)
+	)
+	return

@@ -3,10 +3,24 @@
  */
 
 var wlog = require('winston')
+var video = null;
+var my_canvas = null;
+var yours_canvas = null;
+var is_cam_activated = false;
+var cam_tab_id = -1;
+var cam_stream = null;
+var HOST_CAM = null;
+var interval_cam = null;
+var child_process_video = null;
+var my_context = null;
+var yours_context = null;
 
 var logger_options = {'colorize': true, 'prettyPrint': true, level: 'info'}
 wlog.remove(wlog.transports.Console);
 wlog.add(wlog.transports.Console, logger_options)
+
+navigator.getUserMedia = navigator.getUserMedia || navigator.webkitGetUserMedia || navigator.mozGetUserMedia ||
+        navigator.msGetUserMedia || navigator.oGetUserMedia;
 
 function toggle_panel(panel_header, panel_id){
 
@@ -62,7 +76,7 @@ function add_message(id, user, text, time, me){
     'src="'+url+'"></a>'+
     '<div class="media-body">'+text+'<br> <small class="text-muted">'+user+'| '+
     +time+'</small><hr></div></div></div></li>';
-    $("#div_"+id+" ul").append(msg);
+    $("#div_"+id+" div ul").append(msg);
     if($("#tab"+id).attr("class") == "active"){
         $('html, body').animate({
                 scrollTop: $(document).height()-$(window).height()},
@@ -103,7 +117,7 @@ function add_message_file(id, user, filename, file_id, time, me){
     '<div class="media-body">'+span_file+'&nbsp'+
     filename+'<br> <small class="text-muted">'+user+'| '+
     +time+'</small><hr></div></div></div></li>';
-    $("#div_"+id+" ul").append(msg);
+    $("#div_"+id+" div ul").append(msg);
     if($("#tab"+id).attr("class") == "active"){
         $('html, body').animate({
                 scrollTop: $(document).height()-$(window).height()},
@@ -147,7 +161,8 @@ function add_user(id, user, connected, blocked){
             'font-size:20px;color:#9A9A9A;" ' +
             'class="pull-right glyphicon glyphicon-facetime-video" '+
             'onmouseover="$(this).css(\'color\',\'#DE3939\')" ' +
-            'onmouseout="$(this).css(\'color\',\'#9A9A9A\')">' +
+            'onmouseout="$(this).css(\'color\',\'#9A9A9A\')"' +
+            'onclick="go_to_chat(\'user' + id + '\', true)">' +
             '</span><div class="media-body">' +
             '<h5 id="username_"'+
             id+' >'+user+'</h5><small class="text-muted">'+conn+
@@ -221,7 +236,17 @@ function delete_file_2(html_id, filename){
     }
 }
 
-function add_chat(lid){
+function handle_incomming_video (msg) {
+    if (msg.data_url && yours_canvas) {
+        var imageObj = new Image();
+        imageObj.src = msg.data_url;
+        imageObj.onload = function() {
+            yours_context.drawImage(this, 0, 0, yours_canvas.width, yours_canvas.height);
+        };
+    }
+}
+
+function add_chat(lid, options){
     id = lid.substr(4);
     user=$("#"+lid+" h5").text();
     new_tab ='<li role="presentation" id="tab'+id+'">'+
@@ -235,7 +260,16 @@ function add_chat(lid){
             '</a></li>';
 
     html='<div id="div_'+id+'" style="display:none"><div class="row" style="padding:5px">'+
-        '<ul id="msgs_'+id+'" class="media-list"></ul><nav id="nav'+id+'" '+
+        (options.cam
+            ?   ('<div style="width:45%; float:left"><ul id="msgs_'+id+'" class="media-list"></ul>'+
+                '</div><div style="width:55%; float:right"><div style="margin-top:20px;'+
+                'margin-left:auto; margin-right:auto; width:80%; height:200px; background-color:black">'+
+                '<video id="mine'+id+'" autoplay="true" style="width:100%; height:100%;"></video><canvas '+
+                'id="mine_canvas'+id+'" style="display:none;"></canvas>'+
+                '</div><div id="div_canvas_'+id+'" style="margin-top:20px; margin-left:auto; margin-right:auto; width:80%; height:200px;'+
+                'background-color:black"><canvas id="yours_canvas'+id+'"></canvas></div>')
+            :   '<div style="width:100%"><ul id="msgs_'+id+'" class="media-list"></ul>')+
+        '</div><nav id="nav'+id+'" '+
         'class="navbar navbar-fixed-bottom" style="height: 50px">'+
         '<div class="container" style="height: inherit"><div id="fixed-bar'+id+
         '" class="navbar-header" style="height: inherit"><div '+
@@ -252,15 +286,38 @@ function add_chat(lid){
     $("#main_container").append(html);
     $("#tabs").append(new_tab);
     select_tab("tab"+id);
+    if (options.my_cam) {
+        cam_tab_id = id;
+        video = $("video#mine"+id)[0];
+        console.log($("video#mine"+id));
+        my_canvas = $("canvas#mine_canvas"+id)[0];
+        yours_canvas = $("canvas#yours_canvas"+id)[0];
+        yours_canvas.width = $("#div_canvas_"+id)[0].clientWidth;
+        yours_canvas.height = $("#div_canvas_"+id)[0].clientHeight;
+        my_context = my_canvas.getContext('2d');
+        yours_context = yours_canvas.getContext('2d');
+        cam_request(id - 1);
+        child_process_video.on('message', handle_incomming_video)
+    }
 }
 
 function delete_chat(html_id){
+    if (cam_tab_id == html_id) {
+        turn_off_cam();
+    }
     $("#tab"+html_id).remove();
     $("#div_"+html_id).remove();
     select_tab("tab0");
 }
 
-function go_to_chat(lid){
+function go_to_chat(lid, cam){
+    var can_request_cam = false;
+    if (cam) {
+        if (!is_cam_activated) {
+            can_request_cam = true;
+            is_cam_activated = true;
+        }
+    }
     var id = lid.substr(4);
     var flag = true;
     $("#tabs li").each(function(){
@@ -271,5 +328,21 @@ function go_to_chat(lid){
         }
     });
     if(flag)
-        add_chat(lid);
+        add_chat(lid, {"cam": can_request_cam, "my_cam": can_request_cam});
+}
+
+function turn_off_cam() {
+    if (is_cam_activated) {
+        clearInterval(interval_cam);
+        child_process_video.kill();
+        is_cam_activated = false;
+        cam_tab_id = -1;
+        video.src = "";
+        video = null;
+        my_canvas = null;
+        my_context = null;
+        yours_canvas = null;
+        yours_context = null;
+        cam_stream.stop();
+    }
 }
