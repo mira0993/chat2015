@@ -364,7 +364,8 @@ var receive = function(json){
                 case "Cam":
                     child_process_video = cp.fork('',
                         {execPath: 'node', execArgv: ['js/cam_video.js', json.ip_address]});
-                    interval_cam = setInterval(draw, 200);
+                    child_process_video.on('message', handle_incomming_video);
+                    interval_cam = setInterval(draw, 300);
                     break;
             }
         } else if (json.type == "Cam") {
@@ -373,11 +374,11 @@ var receive = function(json){
                 is_cam_activated = true;
                 child_process_video = cp.fork('',
                     {execPath: 'node', execArgv: ['js/cam_video.js', json.ip_address]});
-                var username_id = json["username_id"] - 1;
+                child_process_video.on('message', handle_incomming_video);
                 var html_id = (Number(json["username_id"]) + 1);
                 if($("#tab"+html_id).length <=0)
-                    add_chat("user"+html_id, {"cam": true, "my_cam": true});
-                add_message(html_id, LIST_USERS[username_id]["username"],
+                    add_chat("user"+html_id, {"cam": true, "my_cam": true, "peer_cam": true});
+                add_message(html_id, LIST_USERS[json["username_id"]]["username"],
                     "Initializing video", "time", false);
             }
         }
@@ -590,13 +591,18 @@ var draw = function (ip_address){
     child_process_video.send(message);
 }
 
-var cam_request = function (user_id) {
+var cam_request = function (user_id, peer_cam) {
     if (navigator.getUserMedia) {       
         navigator.getUserMedia({video: true}, function (stream) {
             video.src = window.URL.createObjectURL(stream);
             cam_stream = stream;
-            var r_data = {'type': 'Cam', 'request_uuid': uuid.v4(), 'username_id': user_id}
-            insert_db(r_data);
+            if (peer_cam)
+                interval_cam = setInterval(draw, 300);
+            else {
+                var r_data = {'type': 'Cam', 'request_uuid': uuid.v4(), 'receiver_id': user_id,
+                    'username_id': USERNAME_ID};
+                insert_db(r_data);
+            }
         }, function (e) {
             wlog.warn(e);
         });

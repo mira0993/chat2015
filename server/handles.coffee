@@ -25,7 +25,7 @@ send_response = (params) ->
 						watchdog(params)
 				cycle_send(true)
 		)
-	replicator.send(params.data)
+	#replicator.send(params.data)
 	store_in_db()
 
 send_error = (params) ->
@@ -154,30 +154,35 @@ module.exports.dispatcher = (params) ->
 			)
 
 	dispatcher_private = () ->
-		stmt = db.prepare("""delete from messages_#{params.data.username_id}
-			where id = ?""")
-		db.each("""select A.id, B.id username_id, A.message
-			from messages_#{params.data.username_id} A
-			inner join users B on A.sender=B.id""",
-			((err, row) ->
-				if err
-					w.error(err)
-				else
-					params.resp.messages.push(
-						"type": "private"
-						"username_id": row.username_id
-						"text": row.message)
-					stmt.run(row.id, (err) ->
-						if err
-							w.error(err)
+		db.get("""select name from sqlite_master where type='table' and
+			name='messages_#{params.data.username_id}'""", (err, row) ->
+				if row
+					stmt = db.prepare("""delete from
+						messages_#{params.data.username_id} where id = ?""")
+					db.each("""select A.id, B.id username_id, A.message
+						from messages_#{params.data.username_id} A
+						inner join users B on A.sender=B.id""",
+						((err, row) ->
+							if err
+								w.error(err)
+							else
+								params.resp.messages.push(
+									"type": "private"
+									"username_id": row.username_id
+									"text": row.message)
+								stmt.run(row.id, (err) ->
+									if err
+										w.error(err)
+								)
+						),
+						((err, num_rows) ->
+							if err
+								w.error(err)
+							dispatcher_file()
+						)
 					)
-			),
-			((err, num_rows) ->
-				if err
-					w.error(err)
-				dispatcher_file()
-			)
 		)
+		
 	
 	stmt = db.prepare('delete from push_public where id = ? and user = ?')
 	db.each('''select B.id, B.user, C.id username_id, A.message
@@ -418,7 +423,7 @@ module.exports.unblock_user = (params) ->
 
 module.exports.init_cam = (params) ->
 	db.get('select ip_address, port from sessions where id = ?',
-		params.data.username_id,
+		params.data.receiver_id,
 		(err, row) ->
 			if err
 				params.err = err
@@ -430,13 +435,15 @@ module.exports.init_cam = (params) ->
 				params.resp = 
 					'response': 'OK'
 					'ip_address': row.ip_address
-					'username_id': params.data.username_id
 				send_response(params)
 				new_params = new Object()
 				extend(true, new_params, params)
+				new_params.resp.username_id = params.data.username_id
 				new_params.resp.ip_address = params.clt.address
 				new_params.clt.address = row.ip_address
 				new_params.clt.port = row.port
+				w.warn('Sending')
+				w.warn(new_params)
 				send_response(new_params)
 	)
 	return

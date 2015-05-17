@@ -6,7 +6,7 @@ global.w = require('winston')
 hdl = require('./handles')
 external = require('./external')
 
-PORT = 8000
+PORT = 9000
 HOST = '0.0.0.0'
 global.MULTICAST_HOST = '255.255.255.255'
 SRV_ID = '-1'
@@ -84,7 +84,7 @@ create_db = () ->
 		primary key (blocker, blocked))''')
 
 send_time_difference = () ->
-	w.info("send_time_difference init func")
+	w.debug("send_time_difference init func")
 	global.waiting_for_clock = false
 	sum = 0
 	for i in global.timmers
@@ -100,12 +100,12 @@ send_time_difference = () ->
 					w.error(err)
 					cycle()
 				else
-					w.info("sent "+(adjust)+" to "+i.addr)
+					w.debug("sent "+(adjust)+" to "+i.addr)
 		)
-	cycle()
+		cycle()
 
 global.send_master_time = () ->
-	w.info("send_master_time init func")
+	w.debug("send_master_time init func")
 	global.waiting_for_clock = true
 	global.current_time = Date.now();
 	global.timmers = []
@@ -122,7 +122,7 @@ global.send_master_time = () ->
 i_am_alive = () ->
 	msg = new Buffer(JSON.stringify({'alive': true}))
 	srv.send(msg, 0, msg.length, PORT, "255.255.255.255")
-	w.info("still alive")
+	w.debug("still alive")
 
 who_is_master = () ->
 	message = new Buffer(JSON.stringify({'who_is_the_master': true}));
@@ -135,12 +135,11 @@ who_is_master = () ->
 			if err
 				w.error(err)
 			else
-				w.info("sent broadcast")
-			w.info(global.init_master_flag)
-			setTimeout(( () ->
+				w.debug("sent broadcast")
+			w.debug(global.init_master_flag)
+			setTimeout(() ->
 				if global.init_master_flag == false
 					times++
-					w.info(times)
 					if times <= 2
 						cycle()
 					else
@@ -149,7 +148,8 @@ who_is_master = () ->
 						setInterval(i_am_alive, 3000)
 						process.send({ server_ip: global.master_ip })
 						global.send_master_time()
-						w.info("MASTER node...[OK]")), timeout)
+						w.debug("MASTER node...[OK]")
+			, timeout)
 		)
 	cycle()
 
@@ -177,7 +177,7 @@ new_master = () ->
 							global.new_master_flag = false
 							process.send({"server_ip": global.master_ip})
 							global.send_master_time()
-							w.info("MASTER node...[OK]")
+							w.debug("MASTER node...[OK]")
 							setInterval(i_am_alive, 3000)
 				, timeout)
 		)
@@ -203,7 +203,6 @@ handle_incoming = (msg, clt) ->
 			when 'Unblock' then hdl.unblock_user(params)
 			when 'Cam' then hdl.init_cam(params)
 	else
-		# Cuando es multicast
 		if params.data.who_is_the_master
 			if iAmMaster
 				console.log("other "+clt.address)
@@ -222,19 +221,20 @@ handle_incoming = (msg, clt) ->
 		else if params.data.alive and iAmMaster == false
 			clearTimeout(global.failover_timeout)
 			w.debug("stand_by: restart count")
-			global.failover_timeout = setTimeout(new_master,6000);
+			global.failover_timeout = setTimeout(new_master,9000);
 
 		else if params.data.new_master
 			global.master_ip = clt.address
-			console.log("new_master_message: "+params.data.new_master+clt.address)
+			w.info("I am becoming the new master: node (%s), address (%s)",
+				params.data.new_master, clt.address)
 			if iAmMaster == false or (iAmMaster and params.data.new_master > SRV_ID)
 				global.iAmMaster = false
-				global.failover_timeout = setTimeout(new_master,6000);
+				global.failover_timeout = setTimeout(new_master,9000);
 				process.send({"server_ip": global.master_ip})
 				if global.send_time_obj != null
 					clearTimeout(global.send_time_obj)
 					global.send_time_obj = null
-				w.info("new_server_master_ip: "+ global.master_ip)
+				w.debug("new_server_master_ip: "+ global.master_ip)
 
 		else if params.data.time
 			w.debug("received master's time "+params.data.time)
@@ -256,10 +256,10 @@ handle_incoming = (msg, clt) ->
 					tmp = {'addr': clt.address, 'diff': params.data.diff}
 				global.timmers.push(tmp)
 
-			else if params.data.adjustment != undefined
-				w.debug("adjustment "+params.data.adjustment)
-				global.time_adjustment = params.data.adjustment
-				process.send({adjustment: global.time_adjustment})
+		else if params.data.adjustment != undefined
+			w.debug("adjustment "+params.data.adjustment)
+			global.time_adjustment = params.data.adjustment
+			process.send({adjustment: global.time_adjustment})
 
 		else if params.data.clock_request
 			w.debug("clock request")
@@ -272,7 +272,7 @@ if cluster.isMaster
 	process.on('message', (m) ->
 		if(m.our_id)
 			SRV_ID = m.our_id
-			w.info("server_id: "+ SRV_ID)
+			w.debug("server_id: "+ SRV_ID)
 			if global.iAmMaster == false
 				resp = new Buffer(JSON.stringify({'clock_request': "true"}))
 				srv.send(resp, 0, resp.length, PORT, global.master_ip)
@@ -285,9 +285,7 @@ if cluster.isMaster
 		who_is_master()
 
 		srv_external.on('message', (msg, clt) ->
-			#w.debug(msg)
 			data = JSON.parse(msg.toString('utf-8'))
-			w.debug(data)
 			if not data.is_mine
 				external.handle_new_messages(data)
 		)
@@ -296,31 +294,6 @@ if cluster.isMaster
 	srv_external.on('listening', () ->
 		addr = srv_external.address()
 		srv_external.setBroadcast(true)
-		###
-		setTimeout(() ->
-			srv_external.setBroadcast(true)
-			message = new Buffer(JSON.stringify({'message': 'Hola, como estas?', 'username': 'Cristian'}))
-			srv_external.send(message, 0, message.length, EXTERNAL_PORT, MULTICAST_HOST, (err) ->
-				if err
-					w.error(err)
-			)
-		, 4000)
-		###
-		console.log("Listening on #{addr.address}:#{addr.port}")
-	)
-
-	srv.on('listening', () ->
-		addr = srv.address()
-		###
-		setTimeout(() ->
-			srv.setBroadcast(true);
-			message = new Buffer(JSON.stringify({'who_is_the_master': true}))
-			srv.send(message, 0, message.length, PORT, MULTICAST_HOST, (err) ->
-				if err
-					w.debug(err)
-			)
-		, 1000)
-		###
 		console.log("Listening on #{addr.address}:#{addr.port}")
 	)
 
