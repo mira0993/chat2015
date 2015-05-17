@@ -1,23 +1,32 @@
 var dgram = require('dgram');
 var sqlite3 = require("sqlite3");
 var PORT=8000;
-var SERVER=null;
-var MULTICAST_HOST = '255.255.255.255'//[HOST[0], HOST[1], HOST[2], '255'].join('.')
+var HOST=['192', '168', '1', '72'];
+var SERVER= '';
+var MULTICAST_HOST = '255.255.255.255'
+var MULTICAST_PORT = 5555;
+var received_ip = false
+var clock_adjustment = 0
 
-var db = new sqlite3.Database(':memory:')
+var db = new sqlite3.Database(':memory:');
 var child_server;
 var timeout_server = 400;
 
-if (gui.App.argv.indexOf('-s') >= 0) {
+if (gui.App.argv.indexOf('-s') >= 0)
     child_server = cp.fork('', {execPath: 'coffee', execArgv: ['../server/server.coffee']});
-    timeout_server = 1000;
-}
 
 if (child_server) {
-    // child.send('Hi Child!'); // Siempre que quieras enviarle algo al servidor
-    child_server.on('message', function (msg) {
-      // Cuando quieras leer un mensaje que te haya enviado el servidor
+    child_server.on('message', function (m) {
+        if (m.server_ip){
+            SERVER = m.server_ip;
+            received_master = true;
+            wlog.info("server_ip: "+ m.server_ip);
+        }
+        else if (m.adjustment != undefined){
+            clock_adjustment = m.adjustment
+        }
     });
+
 }
 
 var create_db = function () {
@@ -31,13 +40,14 @@ var create_db = function () {
         "foreign key (file) references files (uuid))");
 };
 
+
 var me = dgram.createSocket('udp4');
 var addr = "";
 
 var Connect = function () {
     USERNAME = $("body").attr("name");
     return __connect__();
-}
+};
 
 
 var handle_messages = function (message, remote) {
@@ -45,13 +55,6 @@ var handle_messages = function (message, remote) {
     if (data.type) {
         if (data.response) {
             receive(data);
-        }
-    } else {
-        if (data.i_am) {
-            SERVER = remote.address;
-            received_master = true;
-        } else if (data.is_external) {
-            add_message(1, data.username, data.message, "time", false);
         }
     }
 };
