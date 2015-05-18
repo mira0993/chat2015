@@ -6,14 +6,16 @@
   "single-instance":false,
   "window": {
     "title": "Chat2015",
-    "widht": 800,
+    "widht": 500,
     "height": 600,
     "max_height": 600,
-    "max_width": 800,
+    "max_width": 500,
     "min_height": 600,
-    "min_width": 800,
+    "min_width": 500,
     "position": "mouse",
-    "resizable": false
+    "resizable": false,
+    "toolbar": false,
+    "icon": "img/chat_icon128.png"
   },
   "scripts": {
     "test": "echo \"Error, no test specified\" && exit 1"

@@ -74,8 +74,8 @@ function add_message(id, user, text, time, me){
     '<div class="media-body"><div class="media">'+
     '<a class="pull-'+align+'" href="#"><img class="media-object img-circle" '+
     'src="'+url+'"></a>'+
-    '<div class="media-body">'+text+'<br> <small class="text-muted">'+user+'| '+
-    +time+'</small><hr></div></div></div></li>';
+    '<div class="media-body">'+text+'<br> <small class="text-muted">'+user+
+    '</small><hr></div></div></div></li>';
     $("#div_"+id+" div ul").append(msg);
     if($("#tab"+id).attr("class") == "active"){
         $('html, body').animate({
@@ -98,15 +98,20 @@ function add_message_file(id, user, filename, file_id, time, me){
         bkg_color = "55C1E7";
         span_file = '<span id="file"'+file_id+' class="glyphicon glyphicon-file" ' +
                     'title="'+filename+'"></span>';
+        if(user.length > 0)
+            url = "http://placehold.it/50/"+bkg_color+"/fff&text="+USERNAME[0].toUpperCase();
+        else
+            url = "http://placehold.it/50/"+bkg_color+"/fff&text=!";
     }else{
-        span_file = '<a style="cursor:pointer" onclick=__download__('+file_id+')>' +
+        span_file = '<a style="cursor:pointer">' +
         '<span id="file"'+file_id+' class="glyphicon glyphicon-file" ' +
         'title="'+filename+'"></span></a>';
+        if(user.length > 0)
+            url = "http://placehold.it/50/"+bkg_color+"/fff&text="+user[0].toUpperCase();
+        else
+            url = "http://placehold.it/50/"+bkg_color+"/fff&text=!";
     }
-    if(user.length > 0)
-        url = "http://placehold.it/50/"+bkg_color+"/fff&text="+user[0].toUpperCase();
-    else
-        url = "http://placehold.it/50/"+bkg_color+"/fff&text=!";
+    
 
 
 
@@ -115,8 +120,8 @@ function add_message_file(id, user, filename, file_id, time, me){
     '<a class="pull-'+align+'" href="#"><img class="media-object img-circle" '+
     'src="'+url+'"></a>'+
     '<div class="media-body">'+span_file+'&nbsp'+
-    filename+'<br> <small class="text-muted">'+user+'| '+
-    +time+'</small><hr></div></div></div></li>';
+    filename+'<br> <small class="text-muted">'+user+
+    '</small><hr></div></div></div></li>';
     $("#div_"+id+" div ul").append(msg);
     if($("#tab"+id).attr("class") == "active"){
         $('html, body').animate({

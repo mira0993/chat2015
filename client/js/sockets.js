@@ -42,7 +42,7 @@ var show_clock = function() {
     var s=today.getSeconds();
     m = checkTime(m);
     s = checkTime(s);
-    $("#clock_panel").html("<h2>"+h+":"+m+":"+s+"</h2>");
+    $("#clock_panel").html("<row><h2 style='color:#BDBDBD;font-size:42px;font-weight:200;text-align:center'>"+h+":"+m+":"+s+"</h2></row>");
    // wlog.info(h+":"+m+":"+s);
     setTimeout(function(){show_clock()},500);
 };
@@ -233,6 +233,7 @@ var recv_un_block = function(json, type){
 var recv_connect = function(json){
     if(json["response"] == "OK") {
         USERNAME_ID = json["username_id"];
+        win.title = "Chat2015 - "+USERNAME;
         show_clock();
         child_server.send({our_id: USERNAME_ID});
         __list_user__("")
@@ -406,6 +407,9 @@ var _save_file = function (f_uuid) {
                     if (err)
                         wlog.error(err);
                     stream.end();
+                    if($("#tab"+(sender + 1)).length <=0){
+                        add_chat("user"+(sender + 1));
+                    }
                     add_message_file(sender + 1,
                         LIST_USERS[sender]["username"],
                         filename, f_uuid,"time", false);
@@ -480,6 +484,7 @@ var _send_header = function (full_path, receiver) {
 */
 var send_file = function (data) {
     var f_uuid = data.file_uuid;
+    var filename = data.fn;
     var r_uuid = uuid.v4();
     db.get('select ch_order, content from chunks where file = ? order by ch_order limit 1',
         f_uuid,
@@ -507,6 +512,11 @@ var send_file = function (data) {
                                             stmt.run(f_uuid, function (err) {
                                                 if (err)
                                                     error(err);
+                                                else
+                                                    console.log(data)
+                                                    add_message_file(row.receiver + 1, 
+                                                        LIST_USERS[row.receiver].username,
+                                                        filename, f_uuid,(new Date()).toLocaleTimeString(), true)
                                             });
                                         }
                                     }

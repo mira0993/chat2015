@@ -372,7 +372,7 @@ module.exports.receive_file = (params) ->
 				send_error(params)
 			else
 				w.debug('Receiving file %s', params.data.filename)
-				params.resp = {'response': 'OK', 'file_uuid': params.data.file_uuid}
+				params.resp = {'response': 'OK', 'file_uuid': params.data.file_uuid, 'fn':params.data.filename}
 				send_response(params)
 		)
 	)
