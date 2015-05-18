@@ -6,7 +6,8 @@ get_actual_dt_string = () ->
 	return (new Date).toISOString()
 
 send_response = (params) ->
-	omit_arr = ['Push', 'List', 'Cam', 'R_Chunk', 'S_Chunk', 'File']
+	#omit_arr = ['Push', 'List', 'Cam', 'R_Chunk', 'S_Chunk', 'File']
+	omit_arr = ['List', 'Cam', 'R_Chunk', 'S_Chunk', 'File']
 	sender = () ->
 		params.resp.response_uuid = params.data.request_uuid
 		params.resp.type = params.data.type
@@ -26,10 +27,8 @@ send_response = (params) ->
 				setTimeout(store_in_db, 500)
 			else if omit_arr.indexOf(params.data.type) == -1
 				flag_log = true
-				###
 				if params.data.type == "Push" and params.resp.messages.length == 0
 					flag_log = false
-				###
 				if flag_log
 					db.get('select id from logs order by id desc limit 1',
 						(err, row) ->
@@ -41,7 +40,7 @@ send_response = (params) ->
 								if err
 									w.error(err)
 								else
-									w.error('Storing %d', log_id)
+									w.debug('Storing %d', log_id)
 								sender()
 							)
 					)
@@ -52,6 +51,8 @@ send_response = (params) ->
 		)
 	if iAmMaster
 		store_in_db()
+	else
+		module.exports.replicator_dequeue()
 
 send_error = (params) ->
 	params.resp = {'response': "#{params.err}"}
@@ -467,8 +468,15 @@ module.exports.init_cam = (params) ->
 				new_params.resp.ip_address = params.clt.address
 				new_params.clt.address = row.ip_address
 				new_params.clt.port = row.port
-				w.warn('Sending')
-				w.warn(new_params)
+				w.debug('Sending')
+				w.debug(new_params)
 				send_response(new_params)
 	)
 	return
+
+module.exports.replicator_dequeue = () ->
+	if rdequeue.length == 0
+		setTimeout(module.exports.replicator_dequeue, 1000)
+	else
+		params = rdequeue.shift()
+		handle_incoming(params.json, params.clt)

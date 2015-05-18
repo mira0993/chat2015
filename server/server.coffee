@@ -4,8 +4,9 @@ sqlite3 = require('sqlite3')
 global.w = require('winston')
 hdl = require('./handles')
 external = require('./external')
+Dequeue = require('dequeue')
 
-PORT = 9000
+PORT = 10000
 HOST = '0.0.0.0'
 global.MULTICAST_HOST = '255.255.255.255'
 SRV_ID = '-1'
@@ -15,7 +16,7 @@ global.iAmMaster = false
 global.init_master_flag = true
 global.new_master_flag = false
 global.master_ip = ''
-
+global.rdequeue = new Dequeue()
 global.waiting_for_clock = false
 global.timmers = []
 global.current_time = Date.now()
@@ -157,7 +158,7 @@ who_is_master = () ->
 
 new_master = () ->
 	if SRV_ID <= 0
-		w.error("Not valid ID. Cannot send new_master message")
+		w.warn("Not valid ID. Cannot send new_master message")
 		return
 	global.iAmMaster = true
 	global.new_master_flag = true
@@ -187,15 +188,13 @@ new_master = () ->
 
 watch_replicator = (json) ->
 	clt = {'address': '', 'port': -1}
-	handle_incoming(JSON.stringify(json), clt)
+	rdequeue.push({'json': JSON.stringify(json), 'clt': clt})
 
-handle_incoming = (msg, clt) ->
+global.handle_incoming = (msg, clt) ->
 	params =
 		"clt": clt
 		"data": JSON.parse(msg.toString('utf-8'))
 	if params.data.type
-		if not iAmMaster
-			w.warn(params.data)
 		switch params.data.type
 			when 'ACK' then hdl.receive_ack(params)
 			when 'Push' then hdl.dispatcher(params)
@@ -223,14 +222,14 @@ handle_incoming = (msg, clt) ->
 							'id': params.data.log_id
 							'data': JSON.parse(row.data)
 						message = new Buffer(JSON.stringify(data))
-						w.error(data)
+						w.debug(data)
 						srv.send(message, 0, message.length, clt.port, clt.address)
 					else
-						w.warn('Not row')
+						w.debug('Not row')
 			)
 		else if params.data.replication
 			stmt = db.prepare('insert into logs values (?, ?)')
-			w.warn(params.data.id)
+			w.debug(params.data.id)
 			stmt.run(params.data.log_id,
 				JSON.stringify(params.data.data),
 				(err) ->
@@ -250,7 +249,7 @@ handle_incoming = (msg, clt) ->
 			global.init_master_flag = true
 			global.iAmMaster = false
 			global.master_ip = clt.address
-			global.failover_timeout = setTimeout(new_master,9000);
+			global.failover_timeout = setTimeout(new_master,30000);
 			process.send({"server_ip": global.master_ip})
 			w.debug("STAND_BY node")
 
@@ -259,7 +258,7 @@ handle_incoming = (msg, clt) ->
 			w.debug("stand_by: restart count")
 			global.master_ip = clt.address
 			process.send({"server_ip": global.master_ip})
-			global.failover_timeout = setTimeout(new_master,9000);
+			global.failover_timeout = setTimeout(new_master,30000);
 
 		else if params.data.new_master
 			global.master_ip = clt.address
@@ -267,7 +266,7 @@ handle_incoming = (msg, clt) ->
 				params.data.new_master, clt.address)
 			if params.data.new_master > SRV_ID
 				global.iAmMaster = false
-				global.failover_timeout = setTimeout(new_master,9000);
+				global.failover_timeout = setTimeout(new_master,30000);
 				process.send({"server_ip": global.master_ip})
 				if global.send_time_obj != null
 					clearTimeout(global.send_time_obj)
@@ -313,7 +312,6 @@ handle_replication = () ->
 		if row
 			log_id = row.id + 1
 		data = {'pull_repl': true, 'log_id': log_id}
-		w.info(data)
 		msg = new Buffer(JSON.stringify(data))
 		srv.send(msg, 0, msg.length, PORT, global.master_ip)
 	)
@@ -353,3 +351,5 @@ srv.bind(PORT, HOST)
 
 if DEBUG_EXTERNAL
 	srv_external.bind(EXTERNAL_PORT, HOST)
+
+hdl.replicator_dequeue()
