@@ -49,10 +49,11 @@ send_response = (params) ->
 			else
 				sender()
 		)
-	if iAmMaster
-		store_in_db()
-	else
+	if params.clt.port == -1
 		module.exports.replicator_dequeue()
+	else
+		store_in_db()
+		
 
 send_error = (params) ->
 	params.resp = {'response': "#{params.err}"}
