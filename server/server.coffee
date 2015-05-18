@@ -1,12 +1,11 @@
 dgram = require('dgram')
-cluster = require('cluster')
 cp = require('child_process')
 sqlite3 = require('sqlite3')
 global.w = require('winston')
 hdl = require('./handles')
 external = require('./external')
 
-PORT = 8000
+PORT = 9000
 HOST = '0.0.0.0'
 global.MULTICAST_HOST = '255.255.255.255'
 SRV_ID = '-1'
@@ -26,14 +25,14 @@ global.srv = dgram.createSocket('udp4')
 global.EXTERNAL_PORT = 3333
 global.srv_external = dgram.createSocket('udp4')
 global.db = new sqlite3.Database(':memory:')
-#db = new sqlite3.Database('test.db')
+#global.db = new sqlite3.Database('test.db')
 
 DEBUG_EXTERNAL = true
 
 logger_options =
 	colorize: true
 	prettyPrint: true
-	level: 'debug'
+	level: 'error'
 
 w.remove(w.transports.Console);
 w.add(w.transports.Console, logger_options)
@@ -82,9 +81,12 @@ create_db = () ->
 		foreign key (blocker) references users (id),
 		foreign key (blocked) references users (id),
 		primary key (blocker, blocked))''')
+	db.run('''create table logs(
+		id integer primary key,
+		data text)''')
 
 send_time_difference = () ->
-	w.info("send_time_difference init func")
+	w.debug("send_time_difference init func")
 	global.waiting_for_clock = false
 	sum = 0
 	for i in global.timmers
@@ -100,12 +102,12 @@ send_time_difference = () ->
 					w.error(err)
 					cycle()
 				else
-					w.info("sent "+(adjust)+" to "+i.addr)
+					w.debug("sent "+(adjust)+" to "+i.addr)
 		)
-	cycle()
+		cycle()
 
 global.send_master_time = () ->
-	w.info("send_master_time init func")
+	w.debug("send_master_time init func")
 	global.waiting_for_clock = true
 	global.current_time = Date.now();
 	global.timmers = []
@@ -122,7 +124,7 @@ global.send_master_time = () ->
 i_am_alive = () ->
 	msg = new Buffer(JSON.stringify({'alive': true}))
 	srv.send(msg, 0, msg.length, PORT, "255.255.255.255")
-	w.info("still alive")
+	w.debug("still alive")
 
 who_is_master = () ->
 	message = new Buffer(JSON.stringify({'who_is_the_master': true}));
@@ -135,12 +137,11 @@ who_is_master = () ->
 			if err
 				w.error(err)
 			else
-				w.info("sent broadcast")
-			w.info(global.init_master_flag)
-			setTimeout(( () ->
+				w.debug("sent broadcast")
+			w.debug(global.init_master_flag)
+			setTimeout(() ->
 				if global.init_master_flag == false
 					times++
-					w.info(times)
 					if times <= 2
 						cycle()
 					else
@@ -149,7 +150,8 @@ who_is_master = () ->
 						setInterval(i_am_alive, 3000)
 						process.send({ server_ip: global.master_ip })
 						global.send_master_time()
-						w.info("MASTER node...[OK]")), timeout)
+						w.debug("MASTER node...[OK]")
+			, timeout)
 		)
 	cycle()
 
@@ -177,17 +179,23 @@ new_master = () ->
 							global.new_master_flag = false
 							process.send({"server_ip": global.master_ip})
 							global.send_master_time()
-							w.info("MASTER node...[OK]")
+							w.debug("MASTER node...[OK]")
 							setInterval(i_am_alive, 3000)
 				, timeout)
 		)
 	cycle()
+
+watch_replicator = (json) ->
+	clt = {'address': '', 'port': -1}
+	handle_incoming(JSON.stringify(json), clt)
 
 handle_incoming = (msg, clt) ->
 	params =
 		"clt": clt
 		"data": JSON.parse(msg.toString('utf-8'))
 	if params.data.type
+		if not iAmMaster
+			w.warn(params.data)
 		switch params.data.type
 			when 'ACK' then hdl.receive_ack(params)
 			when 'Push' then hdl.dispatcher(params)
@@ -203,8 +211,35 @@ handle_incoming = (msg, clt) ->
 			when 'Unblock' then hdl.unblock_user(params)
 			when 'Cam' then hdl.init_cam(params)
 	else
-		# Cuando es multicast
-		if params.data.who_is_the_master
+		if params.data.pull_repl
+			db.get('select data from logs where id = ?',
+				params.data.log_id,
+				(err, row) ->
+					if err
+						w.warn(err)
+					else if row
+						data = 
+							'replication': true
+							'id': params.data.log_id
+							'data': JSON.parse(row.data)
+						message = new Buffer(JSON.stringify(data))
+						w.error(data)
+						srv.send(message, 0, message.length, clt.port, clt.address)
+					else
+						w.warn('Not row')
+			)
+		else if params.data.replication
+			stmt = db.prepare('insert into logs values (?, ?)')
+			w.warn(params.data.id)
+			stmt.run(params.data.log_id,
+				JSON.stringify(params.data.data),
+				(err) ->
+					if err
+						w.error(err)
+					else
+						watch_replicator(params.data.data)
+			)
+		else if params.data.who_is_the_master
 			if iAmMaster
 				console.log("other "+clt.address)
 				resp = new Buffer(JSON.stringify({'i_am': true}))
@@ -219,22 +254,25 @@ handle_incoming = (msg, clt) ->
 			process.send({"server_ip": global.master_ip})
 			w.debug("STAND_BY node")
 
-		else if params.data.alive and iAmMaster == false
+		else if params.data.alive
 			clearTimeout(global.failover_timeout)
 			w.debug("stand_by: restart count")
-			global.failover_timeout = setTimeout(new_master,6000);
+			global.master_ip = clt.address
+			process.send({"server_ip": global.master_ip})
+			global.failover_timeout = setTimeout(new_master,9000);
 
 		else if params.data.new_master
 			global.master_ip = clt.address
-			console.log("new_master_message: "+params.data.new_master+clt.address)
-			if iAmMaster == false or (iAmMaster and params.data.new_master > SRV_ID)
+			w.info("I am becoming the new master: node (%s), address (%s)",
+				params.data.new_master, clt.address)
+			if params.data.new_master > SRV_ID
 				global.iAmMaster = false
-				global.failover_timeout = setTimeout(new_master,6000);
+				global.failover_timeout = setTimeout(new_master,9000);
 				process.send({"server_ip": global.master_ip})
 				if global.send_time_obj != null
 					clearTimeout(global.send_time_obj)
 					global.send_time_obj = null
-				w.info("new_server_master_ip: "+ global.master_ip)
+				w.debug("new_server_master_ip: "+ global.master_ip)
 
 		else if params.data.time
 			w.debug("received master's time "+params.data.time)
@@ -256,10 +294,10 @@ handle_incoming = (msg, clt) ->
 					tmp = {'addr': clt.address, 'diff': params.data.diff}
 				global.timmers.push(tmp)
 
-			else if params.data.adjustment != undefined
-				w.debug("adjustment "+params.data.adjustment)
-				global.time_adjustment = params.data.adjustment
-				process.send({adjustment: global.time_adjustment})
+		else if params.data.adjustment != undefined
+			w.debug("adjustment "+params.data.adjustment)
+			global.time_adjustment = params.data.adjustment
+			process.send({adjustment: global.time_adjustment})
 
 		else if params.data.clock_request
 			w.debug("clock request")
@@ -267,73 +305,52 @@ handle_incoming = (msg, clt) ->
 				clearTimeout(global.send_time_obj)
 				global.send_master_time()
 
-if cluster.isMaster
-	# Client communication
-	process.on('message', (m) ->
-		if(m.our_id)
-			SRV_ID = m.our_id
-			w.info("server_id: "+ SRV_ID)
-			if global.iAmMaster == false
-				resp = new Buffer(JSON.stringify({'clock_request': "true"}))
-				srv.send(resp, 0, resp.length, PORT, global.master_ip)
-
+handle_replication = () ->
+	if iAmMaster and master_ip != ''
+		return
+	db.get('select id from logs order by id desc limit 1', (err, row) ->
+		log_id = 1
+		if row
+			log_id = row.id + 1
+		data = {'pull_repl': true, 'log_id': log_id}
+		w.info(data)
+		msg = new Buffer(JSON.stringify(data))
+		srv.send(msg, 0, msg.length, PORT, global.master_ip)
 	)
 
-	srv.on('listening', () ->
-		addr = srv.address()
-		console.log("Listening on #{addr.address}:#{addr.port}")
-		who_is_master()
+# Client communication
+process.on('message', (m) ->
+	if(m.our_id)
+		SRV_ID = m.our_id
+		w.debug("server_id: "+ SRV_ID)
+		if global.iAmMaster == false
+			resp = new Buffer(JSON.stringify({'clock_request': "true"}))
+			srv.send(resp, 0, resp.length, PORT, global.master_ip)
 
-		srv_external.on('message', (msg, clt) ->
-			#w.debug(msg)
-			data = JSON.parse(msg.toString('utf-8'))
-			w.debug(data)
-			if not data.is_mine
-				external.handle_new_messages(data)
-		)
+)
+
+srv.on('listening', () ->
+	setInterval(handle_replication, 1000)
+	addr = srv.address()
+	console.log("Listening on #{addr.address}:#{addr.port}")
+	who_is_master()
+
+	srv_external.on('message', (msg, clt) ->
+		data = JSON.parse(msg.toString('utf-8'))
+		if not data.is_mine
+			external.handle_new_messages(data)
 	)
+)
 
-	srv_external.on('listening', () ->
-		addr = srv_external.address()
-		srv_external.setBroadcast(true)
-		###
-		setTimeout(() ->
-			srv_external.setBroadcast(true)
-			message = new Buffer(JSON.stringify({'message': 'Hola, como estas?', 'username': 'Cristian'}))
-			srv_external.send(message, 0, message.length, EXTERNAL_PORT, MULTICAST_HOST, (err) ->
-				if err
-					w.error(err)
-			)
-		, 4000)
-		###
-		console.log("Listening on #{addr.address}:#{addr.port}")
-	)
+srv_external.on('listening', () ->
+	addr = srv_external.address()
+	srv_external.setBroadcast(true)
+	console.log("Listening on #{addr.address}:#{addr.port}")
+)
 
-	srv.on('listening', () ->
-		addr = srv.address()
-		###
-		setTimeout(() ->
-			srv.setBroadcast(true);
-			message = new Buffer(JSON.stringify({'who_is_the_master': true}))
-			srv.send(message, 0, message.length, PORT, MULTICAST_HOST, (err) ->
-				if err
-					w.debug(err)
-			)
-		, 1000)
-		###
-		console.log("Listening on #{addr.address}:#{addr.port}")
-	)
+srv.on('message', handle_incoming)
+create_db()
+srv.bind(PORT, HOST)
 
-	srv.on('message', handle_incoming)
-	create_db()
-	srv.bind(PORT, HOST)
-	if DEBUG_EXTERNAL
-		srv_external.bind(EXTERNAL_PORT, HOST)
-
-	# Aqui se crea el primer hijo
-	global.replicator = cluster.fork()
-else
-	repl = require('./replicator')
-	process.on('message', (msg) ->
-		repl.handle(msg);
-	)
+if DEBUG_EXTERNAL
+	srv_external.bind(EXTERNAL_PORT, HOST)

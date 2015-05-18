@@ -291,15 +291,13 @@ function add_chat(lid, options){
     if (options.my_cam) {
         cam_tab_id = id;
         video = $("video#mine"+id)[0];
-        console.log($("video#mine"+id));
         my_canvas = $("canvas#mine_canvas"+id)[0];
         yours_canvas = $("canvas#yours_canvas"+id)[0];
         yours_canvas.width = $("#div_canvas_"+id)[0].clientWidth;
         yours_canvas.height = $("#div_canvas_"+id)[0].clientHeight;
         my_context = my_canvas.getContext('2d');
         yours_context = yours_canvas.getContext('2d');
-        cam_request(id - 1);
-        child_process_video.on('message', handle_incomming_video)
+        cam_request(id - 1, options.peer_cam);
     }
 }
 
@@ -336,7 +334,8 @@ function go_to_chat(lid, cam){
 function turn_off_cam() {
     if (is_cam_activated) {
         clearInterval(interval_cam);
-        child_process_video.kill();
+        if (child_process_video)
+            child_process_video.kill();
         is_cam_activated = false;
         cam_tab_id = -1;
         video.src = "";
@@ -345,6 +344,7 @@ function turn_off_cam() {
         my_context = null;
         yours_canvas = null;
         yours_context = null;
-        cam_stream.stop();
+        if (cam_stream)
+            cam_stream.stop();
     }
 }

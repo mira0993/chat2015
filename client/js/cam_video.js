@@ -51,7 +51,8 @@ srv_send.on('message', function (message, clt) {
 					var data_url = "";
 					for (var i = 0; i < global_num_chunks; i++)
 						data_url += array_chunks[i];
-					process.send({"data_url": data_url});
+					if (data_url.length > 0 && process.connected)
+						process.send({"data_url": data_url});
 					count_chunks = 0;
 					delete array_chunks;
 					array_chunks = new Array();
