@@ -6,7 +6,7 @@ hdl = require('./handles')
 external = require('./external')
 Dequeue = require('dequeue')
 
-PORT = 10000
+PORT = 8000
 HOST = '0.0.0.0'
 global.MULTICAST_HOST = '255.255.255.255'
 SRV_ID = '-1'
@@ -120,7 +120,7 @@ global.send_master_time = () ->
 		else
 			setTimeout(send_time_difference,2000)
 	)
-	global.send_time_obj = setTimeout(global.send_master_time, 30000)
+	global.send_time_obj = setTimeout(global.send_master_time, 10000)
 
 i_am_alive = () ->
 	msg = new Buffer(JSON.stringify({'alive': true}))

@@ -1,6 +1,6 @@
 var dgram = require('dgram');
 var sqlite3 = require("sqlite3");
-var PORT=10000;
+var PORT=8000;
 var HOST=['192', '168', '1', '72'];
 var SERVER= '';
 var MULTICAST_HOST = '255.255.255.255'
