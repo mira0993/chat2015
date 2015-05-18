@@ -326,7 +326,6 @@ process.on('message', (m) ->
 		if global.iAmMaster == false
 			resp = new Buffer(JSON.stringify({'clock_request': "true"}))
 			srv.send(resp, 0, resp.length, PORT, global.master_ip)
-
 )
 
 srv.on('listening', () ->

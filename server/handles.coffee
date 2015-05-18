@@ -50,7 +50,6 @@ send_response = (params) ->
 			else
 				sender()
 		)
-
 	if iAmMaster
 		store_in_db()
 
